@@ -14,19 +14,20 @@ export default function DashboardPage() {
   const [santriList, setSantriList] = useState<Santri[]>([]);
   const [selected, setSelected] = useState<number | "">("");
   const [detail, setDetail] = useState<any>(null);
+  const [range, setRange] = useState("tahun"); // mingguan|bulanan|semester|tahun
 
   // pencarian santri (combobox)
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const blurTimer = useRef<any>(null);
 
-  useEffect(() => { api("/kelas").then(setKelas).catch(() => {}); }, []);
+  useEffect(() => { api("/kelas?aktif=1").then(setKelas).catch(() => {}); }, []);
 
   useEffect(() => {
     const q = new URLSearchParams({ tanggal });
     if (kelasId) q.set("kelas_id", kelasId);
     api(`/dashboard/summary?${q}`).then(setSummary).catch(() => {});
-    const sq = kelasId ? `?kelas_id=${kelasId}` : "";
+    const sq = kelasId ? `?kelas_id=${kelasId}&aktif=1` : "?aktif=1";
     api(`/santri${sq}`).then(setSantriList).catch(() => {});
     // reset pilihan saat ganti kelas
     setSelected(""); setQuery(""); setDetail(null);
@@ -34,8 +35,12 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (selected === "") { setDetail(null); return; }
-    api(`/santri/${selected}/detail`).then(setDetail).catch(() => {});
-  }, [selected]);
+    api(`/santri/${selected}/detail?range=${range}`).then(setDetail).catch(() => {});
+  }, [selected, range]);
+
+  const rangeLabel: Record<string, string> = {
+    mingguan: "Pekan ini (7 hari)", bulanan: "Bulan ini", semester: "Semester berjalan", tahun: "Tahun ajaran",
+  };
 
   const filtered = santriList
     .filter((s) => {
@@ -133,6 +138,39 @@ export default function DashboardPage() {
               <p style={{ margin: "0 0 12px" }}>
                 <strong>{detail.santri.nama}</strong> · NIS {detail.santri.nis || "-"} · {detail.santri.kelas}
               </p>
+
+              {/* SPP terlambat — hanya muncul untuk admin (backend yang menentukan) */}
+              {detail.spp_terlambat && (
+                <div style={{
+                  background: detail.spp_terlambat.length ? "#fef2f2" : "#f0fdf4",
+                  border: `1px solid ${detail.spp_terlambat.length ? "#fecaca" : "#bbf7d0"}`,
+                  borderRadius: 10, padding: "10px 12px", marginBottom: 14,
+                }}>
+                  <strong style={{ fontSize: 13 }}>💳 SPP Terlambat</strong>
+                  {detail.spp_terlambat.length === 0 ? (
+                    <span className="muted" style={{ fontSize: 13 }}> — tidak ada tunggakan. ✅</span>
+                  ) : (
+                    <div style={{ marginTop: 6, display: "flex", flexWrap: "wrap", gap: 6 }}>
+                      {detail.spp_terlambat.map((s: any, i: number) => (
+                        <span key={i} className="badge alpha">{s.label}</span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="row" style={{ justifyContent: "space-between", marginBottom: 10 }}>
+                <select className="input" value={range} onChange={(e) => setRange(e.target.value)} style={{ fontSize: 13, padding: "6px 10px" }}>
+                  <option value="mingguan">Mingguan</option>
+                  <option value="bulanan">Bulanan</option>
+                  <option value="semester">Semester</option>
+                  <option value="tahun">1 Tahun (TA)</option>
+                </select>
+                <span className="muted" style={{ fontSize: 12 }}>
+                  Kehadiran: <strong>{detail.persentase_kehadiran}%</strong> · {rangeLabel[range]}
+                </span>
+              </div>
+
               <div className="row" style={{ marginBottom: 16 }}>
                 <span className="badge hadir">Hadir {detail.kehadiran.hadir}</span>
                 <span className="badge izin">Izin {detail.kehadiran.izin}</span>

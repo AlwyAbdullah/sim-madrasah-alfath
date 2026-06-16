@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
@@ -8,6 +9,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"sim-madrasah/backend/internal/httpx"
+	"sim-madrasah/backend/internal/middleware"
 )
 
 // GET /dashboard/summary?kelas_id=&tanggal=
@@ -68,7 +70,32 @@ func (h *Handler) Summary(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// GET /santri/{id}/detail?periode_id=
+var bulanID = []string{"Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"}
+
+// rentang tanggal untuk filter absensi
+func rentangAbsensi(rng string, now time.Time) (string, string) {
+	end := now.Format("2006-01-02")
+	y, m := now.Year(), int(now.Month())
+	switch rng {
+	case "mingguan":
+		return now.AddDate(0, 0, -6).Format("2006-01-02"), end
+	case "bulanan":
+		return fmt.Sprintf("%04d-%02d-01", y, m), end
+	case "semester":
+		if m >= 7 { // Ganjil Jul–Des
+			return fmt.Sprintf("%04d-07-01", y), end
+		}
+		return fmt.Sprintf("%04d-01-01", y), end // Genap Jan–Jun
+	default: // tahun = tahun ajaran berjalan (Jul–Jun)
+		sy := y
+		if m < 7 {
+			sy = y - 1
+		}
+		return fmt.Sprintf("%04d-07-01", sy), end
+	}
+}
+
+// GET /santri/{id}/detail?periode_id=&range=mingguan|bulanan|semester|tahun
 func (h *Handler) SantriDetail(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
@@ -77,6 +104,11 @@ func (h *Handler) SantriDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	periodeID := r.URL.Query().Get("periode_id")
+	rng := r.URL.Query().Get("range")
+	if rng == "" {
+		rng = "tahun"
+	}
+	start, end := rentangAbsensi(rng, time.Now())
 
 	// identitas
 	var nis, nama, jk, kelasNama string
@@ -89,9 +121,14 @@ func (h *Handler) SantriDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// rekap kehadiran
+	// rekap kehadiran dalam rentang — kecualikan Kamis(5)/Jumat(6) & hari libur
 	rekap := map[string]int{"hadir": 0, "izin": 0, "sakit": 0, "alpha": 0}
-	rows, _ := h.DB.Query(`SELECT status, COUNT(*) FROM absensi WHERE santri_id = ? GROUP BY status`, id)
+	rows, _ := h.DB.Query(`
+		SELECT status, COUNT(*) FROM absensi
+		WHERE santri_id = ? AND tanggal BETWEEN ? AND ?
+		  AND DAYOFWEEK(tanggal) NOT IN (5,6)
+		  AND tanggal NOT IN (SELECT tanggal FROM hari_libur)
+		GROUP BY status`, id, start, end)
 	if rows != nil {
 		for rows.Next() {
 			var st string
@@ -100,6 +137,11 @@ func (h *Handler) SantriDetail(w http.ResponseWriter, r *http.Request) {
 			rekap[st] = c
 		}
 		rows.Close()
+	}
+	totalEfektif := rekap["hadir"] + rekap["izin"] + rekap["sakit"] + rekap["alpha"]
+	persen := 0.0
+	if totalEfektif > 0 {
+		persen = float64(int(float64(rekap["hadir"])/float64(totalEfektif)*1000+0.5)) / 10
 	}
 
 	// nilai per mapel (filter periode opsional)
@@ -143,7 +185,10 @@ func (h *Handler) SantriDetail(w http.ResponseWriter, r *http.Request) {
 		SELECT DATE_FORMAT(tanggal, '%Y-%m-%d'), status, keterangan
 		FROM absensi
 		WHERE santri_id = ? AND status <> 'hadir'
-		ORDER BY tanggal DESC`, id)
+		  AND tanggal BETWEEN ? AND ?
+		  AND DAYOFWEEK(tanggal) NOT IN (5,6)
+		  AND tanggal NOT IN (SELECT tanggal FROM hari_libur)
+		ORDER BY tanggal DESC`, id, start, end)
 	if arows != nil {
 		for arows.Next() {
 			var ar absenRow
@@ -153,12 +198,64 @@ func (h *Handler) SantriDetail(w http.ResponseWriter, r *http.Request) {
 		arows.Close()
 	}
 
-	httpx.JSON(w, http.StatusOK, map[string]interface{}{
+	resp := map[string]interface{}{
 		"santri": map[string]interface{}{
 			"id": id, "nis": nis, "nama": nama, "jenis_kelamin": jk, "kelas": kelasNama,
 		},
-		"kehadiran":      rekap,
-		"ketidakhadiran": ketidakhadiran,
-		"nilai":          nilaiList,
-	})
+		"range":                rng,
+		"kehadiran":            rekap,
+		"persentase_kehadiran": persen,
+		"ketidakhadiran":       ketidakhadiran,
+		"nilai":                nilaiList,
+	}
+
+	// SPP terlambat — KHUSUS ADMIN
+	if c := middleware.ClaimsFrom(r); c != nil && c.Role == "admin" {
+		resp["spp_terlambat"] = h.sppTerlambat(id, time.Now())
+	}
+
+	httpx.JSON(w, http.StatusOK, resp)
+}
+
+type sppLate struct {
+	Tahun int    `json:"tahun"`
+	Bulan int    `json:"bulan"`
+	Label string `json:"label"`
+}
+
+// sppTerlambat: bulan SPP (tahun ajaran Jul–Jun berjalan) yang sudah jatuh tempo tapi belum lunas.
+func (h *Handler) sppTerlambat(santriID int64, now time.Time) []sppLate {
+	y, m := now.Year(), int(now.Month())
+	startYear := y
+	if m < 7 {
+		startYear = y - 1
+	}
+	// 12 bulan TA: Jul..Des (startYear), Jan..Jun (startYear+1)
+	type ym struct{ Y, M int }
+	bulanTA := []ym{}
+	for mm := 7; mm <= 12; mm++ {
+		bulanTA = append(bulanTA, ym{startYear, mm})
+	}
+	for mm := 1; mm <= 6; mm++ {
+		bulanTA = append(bulanTA, ym{startYear + 1, mm})
+	}
+	// status lunas
+	paid := map[string]bool{}
+	prows, _ := h.DB.Query(`SELECT tahun, bulan FROM spp WHERE santri_id = ? AND lunas = 1`, santriID)
+	if prows != nil {
+		for prows.Next() {
+			var ty, tb int
+			_ = prows.Scan(&ty, &tb)
+			paid[fmt.Sprintf("%d-%d", ty, tb)] = true
+		}
+		prows.Close()
+	}
+	late := []sppLate{}
+	for _, b := range bulanTA {
+		jatuhTempo := b.Y < y || (b.Y == y && b.M <= m) // sudah lewat/berjalan
+		if jatuhTempo && !paid[fmt.Sprintf("%d-%d", b.Y, b.M)] {
+			late = append(late, sppLate{Tahun: b.Y, Bulan: b.M, Label: fmt.Sprintf("%s %d", bulanID[b.M-1], b.Y)})
+		}
+	}
+	return late
 }

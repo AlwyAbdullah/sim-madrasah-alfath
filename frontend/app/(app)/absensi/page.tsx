@@ -23,7 +23,7 @@ export default function AbsensiPage() {
   const [msg, setMsg] = useState("");
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => { api("/kelas").then(setKelas).catch(() => {}); }, []);
+  useEffect(() => { api("/kelas?aktif=1").then(setKelas).catch(() => {}); }, []);
 
   async function load() {
     if (!kelasId) { setItems([]); return; }

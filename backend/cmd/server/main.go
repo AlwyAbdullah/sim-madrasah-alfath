@@ -54,8 +54,9 @@ func main() {
 
 			r.Get("/auth/me", h.Me)
 
-			// Master
+			// Master (baca — semua role login)
 			r.Get("/kelas", h.ListKelas)
+			r.Get("/kelas/{id}/mapel", h.ListKelasMapel)
 			r.Get("/mata-pelajaran", h.ListMapel)
 			r.Get("/periode", h.ListPeriode)
 			r.Get("/santri", h.ListSantri)
@@ -79,18 +80,20 @@ func main() {
 			r.Get("/nilai/leger", h.LegerNilai)
 			r.Get("/nilai/leger/export", h.ExportLeger)
 
-			// SPP (pembayaran bulanan)
-			r.Get("/spp", h.GetSPP)
-			r.Post("/spp/toggle", h.ToggleSPP)
-			r.Get("/spp/export", h.ExportSPP)
-
-			// Master CRUD — khusus admin
+			// ===== KHUSUS ADMIN =====
 			r.Group(func(r chi.Router) {
 				r.Use(middleware.RequireRole("admin"))
 
+				// SPP (tidak boleh dilihat guru)
+				r.Get("/spp", h.GetSPP)
+				r.Post("/spp/toggle", h.ToggleSPP)
+				r.Get("/spp/export", h.ExportSPP)
+
+				// Master CRUD
 				r.Post("/kelas", h.CreateKelas)
 				r.Put("/kelas/{id}", h.UpdateKelas)
 				r.Delete("/kelas/{id}", h.DeleteKelas)
+				r.Put("/kelas/{id}/mapel", h.SetKelasMapel)
 
 				r.Post("/santri", h.CreateSantri)
 				r.Put("/santri/{id}", h.UpdateSantri)
@@ -104,6 +107,10 @@ func main() {
 				r.Post("/periode", h.CreatePeriode)
 				r.Put("/periode/{id}", h.UpdatePeriode)
 				r.Delete("/periode/{id}", h.DeletePeriode)
+
+				r.Get("/hari-libur", h.ListLibur)
+				r.Post("/hari-libur", h.CreateLibur)
+				r.Delete("/hari-libur/{id}", h.DeleteLibur)
 
 				r.Get("/users", h.ListUsers)
 				r.Post("/users", h.CreateUser)

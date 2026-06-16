@@ -8,9 +8,9 @@ INSERT INTO users (username, password_hash, nama, role) VALUES
   ('guru',  '$2a$12$Jm3nXtsm.eLv9U7hU.cFT.u9MadTgDwIswKslZyijQUYhetB1EiwS', 'Ustadz', 'guru')
 ON DUPLICATE KEY UPDATE nama = VALUES(nama);
 
--- Periode aktif (tahun ajaran dalam Hijriah)
+-- Periode aktif (tahun ajaran Masehi)
 INSERT INTO periode (nama, tahun_ajaran, semester, is_active) VALUES
-  ('1446/1447 Ganjil', '1446 / 1447', 'ganjil', 1)
+  ('2025/2026 Ganjil', '2025/2026', 'ganjil', 1)
 ON DUPLICATE KEY UPDATE is_active = VALUES(is_active);
 
 -- Mata pelajaran

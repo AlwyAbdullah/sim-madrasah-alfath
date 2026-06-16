@@ -42,6 +42,7 @@ func decode(w http.ResponseWriter, r *http.Request, v interface{}) bool {
 type kelasReq struct {
 	Nama    string `json:"nama"`
 	Tingkat string `json:"tingkat"`
+	Aktif   *bool  `json:"aktif"`
 }
 
 func (h *Handler) CreateKelas(w http.ResponseWriter, r *http.Request) {
@@ -53,7 +54,11 @@ func (h *Handler) CreateKelas(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, http.StatusBadRequest, "BAD_REQUEST", "Nama kelas wajib diisi")
 		return
 	}
-	res, err := h.DB.Exec(`INSERT INTO kelas (nama, tingkat) VALUES (?, ?)`, req.Nama, nullStr(req.Tingkat))
+	aktif := true
+	if req.Aktif != nil {
+		aktif = *req.Aktif
+	}
+	res, err := h.DB.Exec(`INSERT INTO kelas (nama, tingkat, aktif) VALUES (?, ?, ?)`, req.Nama, nullStr(req.Tingkat), aktif)
 	if err != nil {
 		dbErr(w, err)
 		return
@@ -72,7 +77,11 @@ func (h *Handler) UpdateKelas(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, http.StatusBadRequest, "BAD_REQUEST", "Nama kelas wajib diisi")
 		return
 	}
-	if _, err := h.DB.Exec(`UPDATE kelas SET nama = ?, tingkat = ? WHERE id = ?`, req.Nama, nullStr(req.Tingkat), id); err != nil {
+	aktif := true
+	if req.Aktif != nil {
+		aktif = *req.Aktif
+	}
+	if _, err := h.DB.Exec(`UPDATE kelas SET nama = ?, tingkat = ?, aktif = ? WHERE id = ?`, req.Nama, nullStr(req.Tingkat), aktif, id); err != nil {
 		dbErr(w, err)
 		return
 	}
@@ -93,6 +102,7 @@ type santriReq struct {
 	NIS          string `json:"nis"`
 	Nama         string `json:"nama"`
 	JenisKelamin string `json:"jenis_kelamin"`
+	NoOrtu       string `json:"no_ortu"`
 	KelasID      int64  `json:"kelas_id"`
 }
 
@@ -105,8 +115,8 @@ func (h *Handler) CreateSantri(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, http.StatusBadRequest, "BAD_REQUEST", "Nama, jenis kelamin (L/P), dan kelas wajib")
 		return
 	}
-	res, err := h.DB.Exec(`INSERT INTO santri (nis, nama, jenis_kelamin, kelas_id) VALUES (?, ?, ?, ?)`,
-		nullStr(req.NIS), req.Nama, req.JenisKelamin, req.KelasID)
+	res, err := h.DB.Exec(`INSERT INTO santri (nis, nama, jenis_kelamin, no_ortu, kelas_id) VALUES (?, ?, ?, ?, ?)`,
+		nullStr(req.NIS), req.Nama, req.JenisKelamin, nullStr(req.NoOrtu), req.KelasID)
 	if err != nil {
 		dbErr(w, err)
 		return
@@ -125,8 +135,8 @@ func (h *Handler) UpdateSantri(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, http.StatusBadRequest, "BAD_REQUEST", "Nama, jenis kelamin (L/P), dan kelas wajib")
 		return
 	}
-	if _, err := h.DB.Exec(`UPDATE santri SET nis = ?, nama = ?, jenis_kelamin = ?, kelas_id = ? WHERE id = ?`,
-		nullStr(req.NIS), req.Nama, req.JenisKelamin, req.KelasID, id); err != nil {
+	if _, err := h.DB.Exec(`UPDATE santri SET nis = ?, nama = ?, jenis_kelamin = ?, no_ortu = ?, kelas_id = ? WHERE id = ?`,
+		nullStr(req.NIS), req.Nama, req.JenisKelamin, nullStr(req.NoOrtu), req.KelasID, id); err != nil {
 		dbErr(w, err)
 		return
 	}

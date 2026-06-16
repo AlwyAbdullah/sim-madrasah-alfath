@@ -31,10 +31,18 @@ export default function NilaiPage() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    api("/kelas").then(setKelas).catch(() => {});
-    api("/mata-pelajaran").then(setMapel).catch(() => {});
+    api("/kelas?aktif=1").then(setKelas).catch(() => {});
     api("/periode").then(setPeriode).catch(() => {});
   }, []);
+
+  // pelajaran mengikuti pemetaan kelas terpilih
+  useEffect(() => {
+    setMapelId("");
+    if (!kelasId) { setMapel([]); return; }
+    api(`/kelas/${kelasId}/mapel`)
+      .then((list: any[]) => setMapel(list.map((m) => ({ id: m.mata_pelajaran_id, nama: m.nama }))))
+      .catch(() => setMapel([]));
+  }, [kelasId]);
 
   const ready = kelasId && mapelId && periodeId;
 

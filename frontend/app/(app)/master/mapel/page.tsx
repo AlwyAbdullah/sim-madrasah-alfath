@@ -10,12 +10,10 @@ export default function MapelMaster() {
       columns={[
         { key: "kode", label: "Kode" },
         { key: "nama", label: "Nama" },
-        { key: "kitab", label: "Nama Kitab" },
       ]}
       fields={[
         { key: "kode", label: "Kode", placeholder: "opsional, mis. FQH" },
         { key: "nama", label: "Nama", required: true },
-        { key: "kitab", label: "Nama Kitab", placeholder: "opsional, mis. MUQODDIMAH" },
       ]}
     />
   );

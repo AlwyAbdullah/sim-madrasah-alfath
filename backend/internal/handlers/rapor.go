@@ -41,19 +41,6 @@ func (h *Handler) RaporData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// kitab per mapel
-	kitab := map[int64]string{}
-	krows, _ := h.DB.Query(`SELECT id, COALESCE(kitab,'') FROM mata_pelajaran`)
-	if krows != nil {
-		for krows.Next() {
-			var id int64
-			var k string
-			_ = krows.Scan(&id, &k)
-			kitab[id] = k
-		}
-		krows.Close()
-	}
-
 	// baris santri ini
 	var me *legerRow
 	for i := range rows {
@@ -73,13 +60,11 @@ func (h *Handler) RaporData(w http.ResponseWriter, r *http.Request) {
 	var jumlah float64
 	var adaNilai bool
 
+	// tampilkan semua pelajaran yang dipetakan ke kelas (kitab dari pemetaan)
 	for _, m := range mapels {
-		if me == nil {
-			break
-		}
-		val := me.Nilai[m.ID]
-		if val == nil {
-			continue // hanya mapel yang santri ini punya nilainya
+		var val *float64
+		if me != nil {
+			val = me.Nilai[m.ID]
 		}
 		// rata kelas mapel ini
 		var sum float64
@@ -96,10 +81,12 @@ func (h *Handler) RaporData(w http.ResponseWriter, r *http.Request) {
 			rata = &rk
 		}
 		nilaiList = append(nilaiList, nilaiRapor{
-			Mapel: m.Nama, Kitab: kitab[m.ID], NilaiAkhir: val, RataKelas: rata,
+			Mapel: m.Nama, Kitab: m.Kitab, NilaiAkhir: val, RataKelas: rata,
 		})
-		jumlah += *val
-		adaNilai = true
+		if val != nil {
+			jumlah += *val
+			adaNilai = true
+		}
 	}
 
 	var rataRata *float64

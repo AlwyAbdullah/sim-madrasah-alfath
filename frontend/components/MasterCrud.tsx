@@ -7,7 +7,7 @@ export type Option = { value: string | number; label: string };
 export type Field = {
   key: string;
   label: string;
-  type?: "text" | "number" | "select" | "password" | "boolean";
+  type?: "text" | "number" | "select" | "password" | "boolean" | "date";
   options?: Option[] | (() => Promise<Option[]>);
   required?: boolean;
   numeric?: boolean;
@@ -154,7 +154,7 @@ export default function MasterCrud({ title, basePath, listPath, columns, fields,
                       ))}
                     </select>
                   ) : (
-                    <input className="input" type={f.type === "password" ? "password" : f.type === "number" ? "number" : "text"}
+                    <input className="input" type={f.type === "password" ? "password" : f.type === "number" ? "number" : f.type === "date" ? "date" : "text"}
                       value={form[f.key] ?? ""} disabled={disabled} required={required}
                       placeholder={f.placeholder || (isEdit && f.optionalOnEdit ? "(kosongkan jika tidak diubah)" : "")}
                       onChange={(e) => setForm({ ...form, [f.key]: e.target.value })} />

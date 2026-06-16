@@ -11,8 +11,9 @@ import (
 )
 
 type legerMapel struct {
-	ID   int64  `json:"id"`
-	Nama string `json:"nama"`
+	ID    int64  `json:"id"`
+	Nama  string `json:"nama"`
+	Kitab string `json:"kitab,omitempty"`
 }
 
 type legerRow struct {
@@ -26,24 +27,41 @@ type legerRow struct {
 
 // buildLeger menyusun matriks nilai akhir + rata-rata + peringkat untuk satu kelas+periode.
 func (h *Handler) buildLeger(kelasID, periodeID string) ([]legerMapel, []legerRow, error) {
-	// mapel yang punya nilai di kelas+periode ini
+	// pelajaran kelas dari pemetaan (kelas_mapel) + kitab
+	mapels := []legerMapel{}
 	mrows, err := h.DB.Query(`
-		SELECT DISTINCT mp.id, mp.nama
-		FROM nilai n
-		JOIN mata_pelajaran mp ON mp.id = n.mata_pelajaran_id
-		JOIN santri s ON s.id = n.santri_id
-		WHERE s.kelas_id = ? AND n.periode_id = ?
-		ORDER BY mp.nama`, kelasID, periodeID)
+		SELECT km.mata_pelajaran_id, mp.nama, COALESCE(km.kitab,'')
+		FROM kelas_mapel km JOIN mata_pelajaran mp ON mp.id = km.mata_pelajaran_id
+		WHERE km.kelas_id = ?
+		ORDER BY km.urutan, mp.nama`, kelasID)
 	if err != nil {
 		return nil, nil, err
 	}
-	mapels := []legerMapel{}
 	for mrows.Next() {
 		var m legerMapel
-		_ = mrows.Scan(&m.ID, &m.Nama)
+		_ = mrows.Scan(&m.ID, &m.Nama, &m.Kitab)
 		mapels = append(mapels, m)
 	}
 	mrows.Close()
+
+	// fallback: kalau belum ada pemetaan, ambil dari pelajaran yang sudah ada nilainya
+	if len(mapels) == 0 {
+		frows, err := h.DB.Query(`
+			SELECT DISTINCT mp.id, mp.nama
+			FROM nilai n JOIN mata_pelajaran mp ON mp.id = n.mata_pelajaran_id
+			JOIN santri s ON s.id = n.santri_id
+			WHERE s.kelas_id = ? AND n.periode_id = ?
+			ORDER BY mp.nama`, kelasID, periodeID)
+		if err != nil {
+			return nil, nil, err
+		}
+		for frows.Next() {
+			var m legerMapel
+			_ = frows.Scan(&m.ID, &m.Nama)
+			mapels = append(mapels, m)
+		}
+		frows.Close()
+	}
 
 	// santri kelas
 	srows, err := h.DB.Query(`SELECT id, COALESCE(nis,''), nama FROM santri WHERE kelas_id = ? AND is_active = 1 ORDER BY nama`, kelasID)

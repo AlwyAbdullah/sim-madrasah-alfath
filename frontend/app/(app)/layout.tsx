@@ -10,15 +10,21 @@ const NAV = [
   { href: "/absensi", label: "Absensi", icon: "🗓️" },
   { href: "/nilai", label: "Nilai", icon: "📝" },
   { href: "/leger", label: "Leger & Peringkat", icon: "🏆" },
-  { href: "/spp", label: "SPP", icon: "💳" },
   { href: "/rapor", label: "Rapor", icon: "📄" },
+];
+
+// Khusus admin (di atas Master Data)
+const ADMIN_NAV = [
+  { href: "/spp", label: "SPP", icon: "💳" },
 ];
 
 const MASTER_NAV = [
   { href: "/master/santri", label: "Santri", icon: "🧑‍🎓" },
   { href: "/master/kelas", label: "Kelas", icon: "🏫" },
+  { href: "/master/pelajaran-kelas", label: "Pelajaran per Kelas", icon: "🔗" },
   { href: "/master/mapel", label: "Mata Pelajaran", icon: "📚" },
   { href: "/master/periode", label: "Periode", icon: "📆" },
+  { href: "/master/libur", label: "Hari Libur", icon: "🌙" },
   { href: "/master/users", label: "User", icon: "👤" },
 ];
 
@@ -59,6 +65,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
           {user?.role === "admin" && (
             <>
+              <div className="nav-section">Keuangan</div>
+              {ADMIN_NAV.map((n) => <NavLink key={n.href} {...n} pathname={pathname} />)}
               <div className="nav-section">Master Data</div>
               {MASTER_NAV.map((n) => <NavLink key={n.href} {...n} pathname={pathname} />)}
             </>

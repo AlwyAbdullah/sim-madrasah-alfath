@@ -32,7 +32,7 @@ export default function RaporPage() {
   const [data, setData] = useState<any>(null);
 
   useEffect(() => {
-    api("/kelas").then(setKelas).catch(() => {});
+    api("/kelas?aktif=1").then(setKelas).catch(() => {});
     api("/periode").then((p: Opt[]) => {
       setPeriode(p);
       const aktif = p.find((x) => x.is_active);

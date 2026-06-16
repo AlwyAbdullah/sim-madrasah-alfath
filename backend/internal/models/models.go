@@ -33,6 +33,7 @@ type Santri struct {
 	NIS          string `json:"nis"`
 	Nama         string `json:"nama"`
 	JenisKelamin string `json:"jenis_kelamin"`
+	NoOrtu       string `json:"no_ortu"`
 	KelasID      int64  `json:"kelas_id"`
 	KelasNama    string `json:"kelas_nama,omitempty"`
 }

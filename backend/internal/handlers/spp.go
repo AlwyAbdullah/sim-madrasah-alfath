@@ -14,24 +14,43 @@ import (
 
 var bulanSingkat = []string{"Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"}
 
-type sppItem struct {
-	SantriID int64         `json:"santri_id"`
-	NIS      string        `json:"nis"`
-	Nama     string        `json:"nama"`
-	Bulan    map[int]bool  `json:"bulan"` // 1..12 -> lunas
-	Lunas    int           `json:"lunas"` // jumlah bulan lunas
+// urutan bulan tahun ajaran: Juli .. Juni
+var urutanBulanTA = []int{7, 8, 9, 10, 11, 12, 1, 2, 3, 4, 5, 6}
+
+// tahun kalender dari (TA start, bulan): Jul..Des = startYear, Jan..Jun = startYear+1
+func calTahun(startYear, bulan int) int {
+	if bulan >= 7 {
+		return startYear
+	}
+	return startYear + 1
 }
 
-// GET /spp?kelas_id=&tahun=
+func taStartSekarang(now time.Time) int {
+	if int(now.Month()) < 7 {
+		return now.Year() - 1
+	}
+	return now.Year()
+}
+
+type sppItem struct {
+	SantriID int64        `json:"santri_id"`
+	NIS      string       `json:"nis"`
+	Nama     string       `json:"nama"`
+	Bulan    map[int]bool `json:"bulan"` // key = bulan kalender (1..12) -> lunas
+	Lunas    int          `json:"lunas"`
+}
+
+// GET /spp?kelas_id=&tahun=  (tahun = tahun ajaran mulai, mis. 2025 = TA 2025/2026)
 func (h *Handler) GetSPP(w http.ResponseWriter, r *http.Request) {
 	kelasID := r.URL.Query().Get("kelas_id")
-	tahun := r.URL.Query().Get("tahun")
+	tahunStr := r.URL.Query().Get("tahun")
 	if kelasID == "" {
 		httpx.Error(w, http.StatusBadRequest, "BAD_REQUEST", "kelas_id wajib")
 		return
 	}
-	if tahun == "" {
-		tahun = fmt.Sprintf("%d", time.Now().Year())
+	startYear := taStartSekarang(time.Now())
+	if tahunStr != "" {
+		fmt.Sscanf(tahunStr, "%d", &startYear)
 	}
 
 	srows, err := h.DB.Query(`SELECT id, COALESCE(nis,''), nama FROM santri WHERE kelas_id = ? AND is_active = 1 ORDER BY nama`, kelasID)
@@ -53,34 +72,34 @@ func (h *Handler) GetSPP(w http.ResponseWriter, r *http.Request) {
 	prows, err := h.DB.Query(`
 		SELECT sp.santri_id, sp.bulan, sp.lunas
 		FROM spp sp JOIN santri s ON s.id = sp.santri_id
-		WHERE s.kelas_id = ? AND sp.tahun = ?`, kelasID, tahun)
+		WHERE s.kelas_id = ? AND ((sp.tahun = ? AND sp.bulan >= 7) OR (sp.tahun = ? AND sp.bulan <= 6))`,
+		kelasID, startYear, startYear+1)
 	if err != nil {
 		httpx.Error(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
 	}
 	for prows.Next() {
-		var sid int64
-		var bln int
+		var sid, bln int64
 		var lunas bool
 		_ = prows.Scan(&sid, &bln, &lunas)
 		if i, ok := idx[sid]; ok && lunas {
-			items[i].Bulan[bln] = true
+			items[i].Bulan[int(bln)] = true
 			items[i].Lunas++
 		}
 	}
 	prows.Close()
 
-	httpx.JSON(w, http.StatusOK, map[string]interface{}{"tahun": tahun, "items": items})
+	httpx.JSON(w, http.StatusOK, map[string]interface{}{"tahun": startYear, "urutan_bulan": urutanBulanTA, "items": items})
 }
 
 type sppToggleReq struct {
 	SantriID int64 `json:"santri_id"`
-	Tahun    int   `json:"tahun"`
-	Bulan    int   `json:"bulan"`
+	Tahun    int   `json:"tahun"` // TA start year
+	Bulan    int   `json:"bulan"` // bulan kalender 1..12
 	Lunas    bool  `json:"lunas"`
 }
 
-// POST /spp/toggle — set status lunas satu (santri, tahun, bulan)
+// POST /spp/toggle
 func (h *Handler) ToggleSPP(w http.ResponseWriter, r *http.Request) {
 	var req sppToggleReq
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -91,13 +110,13 @@ func (h *Handler) ToggleSPP(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, http.StatusBadRequest, "BAD_REQUEST", "santri_id, tahun, bulan (1-12) wajib")
 		return
 	}
+	calY := calTahun(req.Tahun, req.Bulan)
 
 	claims := middleware.ClaimsFrom(r)
 	var userID interface{}
 	if claims != nil {
 		userID = claims.UserID
 	}
-
 	var tgl interface{}
 	if req.Lunas {
 		tgl = time.Now().Format("2006-01-02")
@@ -107,7 +126,7 @@ func (h *Handler) ToggleSPP(w http.ResponseWriter, r *http.Request) {
 		INSERT INTO spp (santri_id, tahun, bulan, lunas, tanggal_bayar, created_by)
 		VALUES (?, ?, ?, ?, ?, ?)
 		ON DUPLICATE KEY UPDATE lunas = VALUES(lunas), tanggal_bayar = VALUES(tanggal_bayar)`,
-		req.SantriID, req.Tahun, req.Bulan, req.Lunas, tgl, userID)
+		req.SantriID, calY, req.Bulan, req.Lunas, tgl, userID)
 	if err != nil {
 		httpx.Error(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
@@ -118,19 +137,19 @@ func (h *Handler) ToggleSPP(w http.ResponseWriter, r *http.Request) {
 // GET /spp/export?kelas_id=&tahun=
 func (h *Handler) ExportSPP(w http.ResponseWriter, r *http.Request) {
 	kelasID := r.URL.Query().Get("kelas_id")
-	tahun := r.URL.Query().Get("tahun")
+	tahunStr := r.URL.Query().Get("tahun")
 	if kelasID == "" {
 		httpx.Error(w, http.StatusBadRequest, "BAD_REQUEST", "kelas_id wajib")
 		return
 	}
-	if tahun == "" {
-		tahun = fmt.Sprintf("%d", time.Now().Year())
+	startYear := taStartSekarang(time.Now())
+	if tahunStr != "" {
+		fmt.Sscanf(tahunStr, "%d", &startYear)
 	}
 
 	var kelasNama string
 	_ = h.DB.QueryRow(`SELECT nama FROM kelas WHERE id = ?`, kelasID).Scan(&kelasNama)
 
-	// data
 	type srow struct {
 		id   int64
 		nis  string
@@ -147,7 +166,10 @@ func (h *Handler) ExportSPP(w http.ResponseWriter, r *http.Request) {
 		srows.Close()
 	}
 	paid := map[int64]map[int]bool{}
-	prows, _ := h.DB.Query(`SELECT sp.santri_id, sp.bulan FROM spp sp JOIN santri s ON s.id=sp.santri_id WHERE s.kelas_id=? AND sp.tahun=? AND sp.lunas=1`, kelasID, tahun)
+	prows, _ := h.DB.Query(`
+		SELECT sp.santri_id, sp.bulan FROM spp sp JOIN santri s ON s.id = sp.santri_id
+		WHERE s.kelas_id = ? AND sp.lunas = 1 AND ((sp.tahun = ? AND sp.bulan >= 7) OR (sp.tahun = ? AND sp.bulan <= 6))`,
+		kelasID, startYear, startYear+1)
 	if prows != nil {
 		for prows.Next() {
 			var sid int64
@@ -169,7 +191,7 @@ func (h *Handler) ExportSPP(w http.ResponseWriter, r *http.Request) {
 	f.DeleteSheet("Sheet1")
 
 	f.SetCellValue(sheet, "A1", "REKAP PEMBAYARAN SPP")
-	f.SetCellValue(sheet, "A2", fmt.Sprintf("Kelas: %s   |   Tahun: %s   |   ✓ = Lunas", kelasNama, tahun))
+	f.SetCellValue(sheet, "A2", fmt.Sprintf("Kelas: %s   |   Tahun Ajaran: %d/%d   |   ✓ = Lunas", kelasNama, startYear, startYear+1))
 
 	headerRow := 4
 	setCell := func(c, rownum int, v interface{}) {
@@ -179,10 +201,10 @@ func (h *Handler) ExportSPP(w http.ResponseWriter, r *http.Request) {
 	setCell(1, headerRow, "No")
 	setCell(2, headerRow, "NIS")
 	setCell(3, headerRow, "Nama")
-	for b := 1; b <= 12; b++ {
-		setCell(3+b, headerRow, bulanSingkat[b-1])
+	for i, b := range urutanBulanTA {
+		setCell(4+i, headerRow, bulanSingkat[b-1])
 	}
-	totalCol := 16 // 3 + 12 + 1
+	totalCol := 16
 	setCell(totalCol, headerRow, "Lunas")
 
 	hStyle, _ := f.NewStyle(&excelize.Style{
@@ -200,9 +222,9 @@ func (h *Handler) ExportSPP(w http.ResponseWriter, r *http.Request) {
 		setCell(2, rownum, s.nis)
 		setCell(3, rownum, s.nama)
 		cnt := 0
-		for b := 1; b <= 12; b++ {
+		for j, b := range urutanBulanTA {
 			if paid[s.id][b] {
-				setCell(3+b, rownum, "✓")
+				setCell(4+j, rownum, "✓")
 				cnt++
 			}
 		}
@@ -215,7 +237,7 @@ func (h *Handler) ExportSPP(w http.ResponseWriter, r *http.Request) {
 	f.SetColWidth(sheet, "C", "C", 26)
 	f.SetColWidth(sheet, "D", "O", 5)
 
-	filename := fmt.Sprintf("SPP_%s_%s.xlsx", sanitize(kelasNama), tahun)
+	filename := fmt.Sprintf("SPP_%s_%d-%d.xlsx", sanitize(kelasNama), startYear, startYear+1)
 	w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
 	if err := f.Write(w); err != nil {
