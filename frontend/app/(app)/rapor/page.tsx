@@ -73,13 +73,13 @@ export default function RaporPage() {
       {!data && <p className="muted no-print">Pilih kelas, santri, dan periode untuk menampilkan rapor.</p>}
 
       {data && (
-        <div className="rapor" style={{ background: "#fff", maxWidth: 760, margin: "0 auto", width: "100%", padding: 24, color: "#000", fontSize: 13 }}>
+        <div className="rapor" style={{ background: "#fff", maxWidth: 720, margin: "0 auto", width: "100%", padding: 16, color: "#000", fontSize: 12 }}>
           {/* KOP */}
-          <img src="/kop-madrasah.jpeg" alt="Madrasah Al Fath" style={{ width: "100%", maxWidth: 620, display: "block", margin: "0 auto 6px" }} />
-          <div style={{ borderBottom: "3px solid #000", marginBottom: 12 }} />
+          <img src="/kop-madrasah.jpeg" alt="Madrasah Al Fath" style={{ width: "100%", maxWidth: 430, display: "block", margin: "0 auto 2px" }} />
+          <div style={{ borderBottom: "2px solid #000", marginBottom: 6 }} />
 
           {/* Judul */}
-          <div style={{ textAlign: "center", fontWeight: 800, lineHeight: 1.4, marginBottom: 14 }}>
+          <div style={{ textAlign: "center", fontWeight: 800, lineHeight: 1.2, marginBottom: 6, fontSize: 13 }}>
             <div>LAPORAN HASIL BELAJAR SANTRI SEMESTER {semester}</div>
             <div>{tahunTitle}</div>
           </div>
@@ -103,7 +103,7 @@ export default function RaporPage() {
           </table>
 
           {/* Nilai */}
-          <table style={{ ...tbl, marginTop: 10 }} cellSpacing={0}>
+          <table style={{ ...tbl, marginTop: 6 }} cellSpacing={0}>
             <thead>
               <tr>
                 <th style={th}>NO<div style={ar}>رقم</div></th>
@@ -142,7 +142,7 @@ export default function RaporPage() {
           </table>
 
           {/* Keterangan */}
-          <table style={{ ...tbl, marginTop: 10 }} cellSpacing={0}>
+          <table style={{ ...tbl, marginTop: 6 }} cellSpacing={0}>
             <thead>
               <tr><th style={th} colSpan={2}>KETERANGAN</th><th style={th} colSpan={2}>KETERANGAN</th></tr>
             </thead>
@@ -169,30 +169,30 @@ export default function RaporPage() {
           </table>
 
           {/* Catatan */}
-          <table style={{ ...tbl, marginTop: 10 }} cellSpacing={0}>
+          <table style={{ ...tbl, marginTop: 6 }} cellSpacing={0}>
             <tbody>
-              <tr><td style={{ ...td, height: 64, verticalAlign: "top", fontWeight: 700 }}>CATATAN <span style={arInline}>الإرشادات</span> :</td></tr>
+              <tr><td style={{ ...td, height: 38, verticalAlign: "top", fontWeight: 700 }}>CATATAN <span style={arInline}>الإرشادات</span> :</td></tr>
             </tbody>
           </table>
 
           {/* Tanda tangan */}
-          <div style={{ display: "flex", justifyContent: "space-between", marginTop: 22, textAlign: "center" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", marginTop: 12, textAlign: "center" }}>
             <div style={{ width: "32%" }}>
               <div>Wali Santri</div>
               <div style={ar}>ولي الطالب</div>
-              <div style={{ height: 56 }} />
+              <div style={{ height: 32 }} />
               <div>(......................)</div>
             </div>
             <div style={{ width: "32%" }}>
               <div>Wali Kelas</div>
               <div style={ar}>ولي الفصل</div>
-              <div style={{ height: 56 }} />
+              <div style={{ height: 32 }} />
               <div>(......................)</div>
             </div>
             <div style={{ width: "32%" }}>
               <div>Malang, {tanggalIndo()}</div>
               <div>Mudir Madrasah</div>
-              <div style={{ height: 56 }} />
+              <div style={{ height: 32 }} />
               <div style={{ fontWeight: 700 }}>( {MUDIR} )</div>
             </div>
           </div>
@@ -202,8 +202,8 @@ export default function RaporPage() {
   );
 }
 
-const tbl: React.CSSProperties = { width: "100%", borderCollapse: "collapse", fontSize: 13 };
-const td: React.CSSProperties = { border: "1px solid #000", padding: "5px 8px", verticalAlign: "middle" };
-const th: React.CSSProperties = { border: "1px solid #000", padding: "5px 8px", fontWeight: 800, textAlign: "center", background: "#f1f5f9" };
-const ar: React.CSSProperties = { fontSize: 12, fontWeight: 400, direction: "rtl" };
-const arInline: React.CSSProperties = { fontSize: 12, fontWeight: 400, color: "#333" };
+const tbl: React.CSSProperties = { width: "100%", borderCollapse: "collapse", fontSize: 12 };
+const td: React.CSSProperties = { border: "1px solid #000", padding: "2px 6px", verticalAlign: "middle", lineHeight: 1.25 };
+const th: React.CSSProperties = { border: "1px solid #000", padding: "2px 6px", fontWeight: 800, textAlign: "center", background: "#f1f5f9", lineHeight: 1.2 };
+const ar: React.CSSProperties = { fontSize: 11, fontWeight: 400, direction: "rtl" };
+const arInline: React.CSSProperties = { fontSize: 11, fontWeight: 400, color: "#333" };

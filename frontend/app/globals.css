@@ -90,8 +90,9 @@ tbody tr:last-child td { border-bottom: none; }
   aside, header, .no-print, .sidebar-overlay { display: none !important; }
   main { padding: 0 !important; }
   body { background: #fff !important; }
-  .rapor { box-shadow: none !important; border: none !important; }
-  @page { margin: 1.5cm; }
+  .rapor { box-shadow: none !important; border: none !important; padding: 0 !important; }
+  .rapor table, .rapor img, .rapor > div { page-break-inside: avoid; }
+  @page { margin: 1cm; }
 }
 .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
 .grid-kpi { display: grid; grid-template-columns: repeat(auto-fit, minmax(168px, 1fr)); gap: 14px; }
