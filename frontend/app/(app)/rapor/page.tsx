@@ -13,12 +13,13 @@ function tanggalIndo(d = new Date()): string {
   return `${d.getDate()} ${bulan[d.getMonth()]} ${d.getFullYear()}`;
 }
 
-// Kepadatan menyesuaikan jumlah mata pelajaran agar selalu memenuhi 1 halaman.
+// Kepadatan menyesuaikan jumlah mapel; konten dijaga agar muat < 1 halaman,
+// sisanya diisi oleh kotak Catatan yang memuai (flex-grow).
 function density(n: number) {
-  if (n <= 4) return { fz: 15, pad: "10px 12px", kop: 560, title: 18, ar: 13, rowH: 38, gap: 10, sigH: 46 };
-  if (n <= 7) return { fz: 13.5, pad: "8px 10px", kop: 500, title: 16, ar: 12, rowH: 32, gap: 8, sigH: 40 };
-  if (n <= 10) return { fz: 12, pad: "5px 8px", kop: 440, title: 14, ar: 11, rowH: 26, gap: 7, sigH: 34 };
-  return { fz: 10.5, pad: "3px 6px", kop: 380, title: 12.5, ar: 10, rowH: 21, gap: 5, sigH: 28 };
+  if (n <= 4) return { fz: 13, pad: "5px 9px", kop: 460, title: 15, ar: 12, rowH: 28, gap: 6, sigH: 34 };
+  if (n <= 7) return { fz: 12, pad: "4px 7px", kop: 420, title: 13.5, ar: 11, rowH: 22, gap: 5, sigH: 30 };
+  if (n <= 10) return { fz: 11, pad: "3px 6px", kop: 380, title: 12.5, ar: 10, rowH: 19, gap: 4, sigH: 26 };
+  return { fz: 10, pad: "2px 5px", kop: 340, title: 11.5, ar: 9, rowH: 16, gap: 3, sigH: 22 };
 }
 
 export default function RaporPage() {
@@ -182,7 +183,7 @@ export default function RaporPage() {
           </table>
 
           {/* Catatan — memuai mengisi sisa ruang */}
-          <div style={{ border: "1px solid #000", padding: d.pad, marginTop: d.gap, fontWeight: 700, flex: "1 1 auto", minHeight: 44 }}>
+          <div style={{ border: "1px solid #000", padding: d.pad, marginTop: d.gap, fontWeight: 700, flex: "1 1 auto", minHeight: 28 }}>
             CATATAN <span style={arIn}>الإرشادات</span> :
           </div>
 

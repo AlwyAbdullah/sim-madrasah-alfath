@@ -86,8 +86,9 @@ tbody tr:last-child td { border-bottom: none; }
 .muted { color: var(--muted); }
 
 /* Cetak rapor: sembunyikan navigasi & kontrol, tampilkan area cetak saja */
-/* Rapor: tinggi seukuran halaman (layar) agar isi memenuhi 1 halaman */
-.rapor-page { min-height: 1010px; }
+/* Rapor: tinggi seukuran halaman (layar) agar isi memenuhi 1 halaman.
+   Target aman untuk kertas Letter (area cetak ±26.3cm @ margin 8mm) maupun A4. */
+.rapor-page { min-height: 955px; }
 
 @media print {
   aside, header, .no-print, .sidebar-overlay { display: none !important; }
@@ -95,8 +96,8 @@ tbody tr:last-child td { border-bottom: none; }
   body { background: #fff !important; }
   .rapor { box-shadow: none !important; border: none !important; padding: 0 !important; }
   .rapor table, .rapor img { page-break-inside: avoid; }
-  .rapor-page { min-height: 0 !important; height: 26.6cm !important; }
-  @page { margin: 1cm; }
+  .rapor-page { min-height: 0 !important; height: 25.3cm !important; overflow: hidden; }
+  @page { margin: 8mm; }
 }
 .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
 .grid-kpi { display: grid; grid-template-columns: repeat(auto-fit, minmax(168px, 1fr)); gap: 14px; }
