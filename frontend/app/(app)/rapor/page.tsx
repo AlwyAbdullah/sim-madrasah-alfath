@@ -89,7 +89,7 @@ export default function RaporPage() {
       {data && (
         <div className="rapor rapor-page" style={{ background: "#fff", maxWidth: 720, margin: "0 auto", width: "100%", padding: 18, color: "#000", fontSize: d.fz, display: "flex", flexDirection: "column", boxShadow: "var(--shadow)" }}>
           {/* KOP */}
-          <img src="/kop-madrasah.jpeg" alt="Madrasah Al Fath" style={{ width: "100%", maxWidth: d.kop, display: "block", margin: "0 auto 3px" }} />
+          <img src="/kop-madrasah.png" alt="Madrasah Al Fath" style={{ width: "100%", maxWidth: d.kop, display: "block", margin: "0 auto 3px" }} />
           <div style={{ borderBottom: "2px solid #000", marginBottom: d.gap }} />
 
           {/* Judul */}
