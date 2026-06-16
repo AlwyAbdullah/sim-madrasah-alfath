@@ -1,0 +1,16 @@
+[Unit]
+Description=SIM-Madrasah Backend (Go)
+After=network.target mysql.service
+
+[Service]
+Type=simple
+WorkingDirectory=/home/deploy/sim-madrasah/backend
+ExecStart=/home/deploy/sim-madrasah/backend/sim-server
+# .env dibaca otomatis dari WorkingDirectory (godotenv)
+Restart=always
+RestartSec=3
+User=deploy
+Group=deploy
+
+[Install]
+WantedBy=multi-user.target

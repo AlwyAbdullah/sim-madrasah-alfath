@@ -1,0 +1,21 @@
+# Go
+/backend/server
+/backend/sim-server
+/backend/*.exe
+
+# env (produksi)
+.env.production
+
+# env
+.env
+.env.local
+
+# Node / Next
+node_modules/
+.next/
+out/
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db

@@ -1,0 +1,17 @@
+[Unit]
+Description=SIM-Madrasah Frontend (Next.js)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/deploy/sim-madrasah/frontend
+ExecStart=/usr/bin/npm run start
+Environment=NODE_ENV=production
+Environment=PORT=3000
+Restart=always
+RestartSec=3
+User=deploy
+Group=deploy
+
+[Install]
+WantedBy=multi-user.target
