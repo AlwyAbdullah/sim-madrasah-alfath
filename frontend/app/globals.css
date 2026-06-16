@@ -86,12 +86,16 @@ tbody tr:last-child td { border-bottom: none; }
 .muted { color: var(--muted); }
 
 /* Cetak rapor: sembunyikan navigasi & kontrol, tampilkan area cetak saja */
+/* Rapor: tinggi seukuran halaman (layar) agar isi memenuhi 1 halaman */
+.rapor-page { min-height: 1010px; }
+
 @media print {
   aside, header, .no-print, .sidebar-overlay { display: none !important; }
   main { padding: 0 !important; }
   body { background: #fff !important; }
   .rapor { box-shadow: none !important; border: none !important; padding: 0 !important; }
-  .rapor table, .rapor img, .rapor > div { page-break-inside: avoid; }
+  .rapor table, .rapor img { page-break-inside: avoid; }
+  .rapor-page { min-height: 0 !important; height: 26.6cm !important; }
   @page { margin: 1cm; }
 }
 .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
