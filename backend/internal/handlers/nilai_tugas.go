@@ -122,12 +122,20 @@ func (h *Handler) SaveTugasBatch(w http.ResponseWriter, r *http.Request) {
 		userID = claims.UserID
 	}
 
+	// Begin transaction first to avoid TOCTOU race on ke auto-increment
+	tx, err := h.DB.Begin()
+	if err != nil {
+		httpx.Error(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+		return
+	}
+	defer tx.Rollback()
+
 	// Tentukan ke: pakai req.Ke bila ada; jika tidak, max(ke)+1 untuk kelas+mapel+periode.
 	ke := 0
 	if req.Ke != nil {
 		ke = *req.Ke
 	} else {
-		_ = h.DB.QueryRow(`
+		_ = tx.QueryRow(`
             SELECT COALESCE(MAX(nt.ke),0)+1
             FROM nilai_tugas nt JOIN santri s ON s.id = nt.santri_id
             WHERE s.kelas_id = ? AND nt.mata_pelajaran_id = ? AND nt.periode_id = ?`,
@@ -136,13 +144,6 @@ func (h *Handler) SaveTugasBatch(w http.ResponseWriter, r *http.Request) {
 			ke = 1
 		}
 	}
-
-	tx, err := h.DB.Begin()
-	if err != nil {
-		httpx.Error(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
-		return
-	}
-	defer tx.Rollback()
 
 	insTugas, err := tx.Prepare(`
         INSERT INTO nilai_tugas (santri_id, mata_pelajaran_id, periode_id, ke, nilai, created_by)
