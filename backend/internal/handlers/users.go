@@ -10,34 +10,36 @@ import (
 )
 
 func (h *Handler) ListUsers(w http.ResponseWriter, r *http.Request) {
-	rows, err := h.DB.Query(`SELECT id, username, nama, role, is_active FROM users ORDER BY username`)
+	rows, err := h.DB.Query(`SELECT id, username, nama, role, is_active, telegram_user_id FROM users ORDER BY username`)
 	if err != nil {
 		dbErr(w, err)
 		return
 	}
 	defer rows.Close()
 	type u struct {
-		ID       int64  `json:"id"`
-		Username string `json:"username"`
-		Nama     string `json:"nama"`
-		Role     string `json:"role"`
-		IsActive bool   `json:"is_active"`
+		ID             int64  `json:"id"`
+		Username       string `json:"username"`
+		Nama           string `json:"nama"`
+		Role           string `json:"role"`
+		IsActive       bool   `json:"is_active"`
+		TelegramUserID *int64 `json:"telegram_user_id"`
 	}
 	out := []u{}
 	for rows.Next() {
 		var x u
-		_ = rows.Scan(&x.ID, &x.Username, &x.Nama, &x.Role, &x.IsActive)
+		_ = rows.Scan(&x.ID, &x.Username, &x.Nama, &x.Role, &x.IsActive, &x.TelegramUserID)
 		out = append(out, x)
 	}
 	httpx.JSON(w, http.StatusOK, out)
 }
 
 type userReq struct {
-	Username string `json:"username"`
-	Nama     string `json:"nama"`
-	Role     string `json:"role"`
-	Password string `json:"password"`
-	IsActive *bool  `json:"is_active"`
+	Username       string `json:"username"`
+	Nama           string `json:"nama"`
+	Role           string `json:"role"`
+	Password       string `json:"password"`
+	IsActive       *bool  `json:"is_active"`
+	TelegramUserID *int64 `json:"telegram_user_id"`
 }
 
 func validRole(r string) bool {
@@ -58,8 +60,9 @@ func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, http.StatusInternalServerError, "HASH_ERROR", "Gagal memproses password")
 		return
 	}
-	res, err := h.DB.Exec(`INSERT INTO users (username, password_hash, nama, role) VALUES (?, ?, ?, ?)`,
-		req.Username, hash, req.Nama, req.Role)
+	res, err := h.DB.Exec(
+		`INSERT INTO users (username, password_hash, nama, role, telegram_user_id) VALUES (?, ?, ?, ?, ?)`,
+		req.Username, hash, req.Nama, req.Role, req.TelegramUserID)
 	if err != nil {
 		dbErr(w, err)
 		return
@@ -83,8 +86,8 @@ func (h *Handler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	if req.IsActive != nil {
 		active = *req.IsActive
 	}
-	if _, err := h.DB.Exec(`UPDATE users SET nama = ?, role = ?, is_active = ? WHERE id = ?`,
-		req.Nama, req.Role, active, id); err != nil {
+	if _, err := h.DB.Exec(`UPDATE users SET nama = ?, role = ?, is_active = ?, telegram_user_id = ? WHERE id = ?`,
+		req.Nama, req.Role, active, req.TelegramUserID, id); err != nil {
 		dbErr(w, err)
 		return
 	}
