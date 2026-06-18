@@ -105,8 +105,8 @@ func (h *Handler) SaveTugasBatch(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, http.StatusBadRequest, "BAD_REQUEST", "Body tidak valid")
 		return
 	}
-	if req.MataPelajaranID == 0 || req.PeriodeID == 0 || len(req.Items) == 0 {
-		httpx.Error(w, http.StatusBadRequest, "BAD_REQUEST", "mata_pelajaran_id, periode_id, items wajib")
+	if req.KelasID == 0 || req.MataPelajaranID == 0 || req.PeriodeID == 0 || len(req.Items) == 0 {
+		httpx.Error(w, http.StatusBadRequest, "BAD_REQUEST", "kelas_id, mata_pelajaran_id, periode_id, items wajib")
 		return
 	}
 	for _, it := range req.Items {
