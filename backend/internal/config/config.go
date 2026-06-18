@@ -20,6 +20,7 @@ type Config struct {
 	JWTSecret    string
 	JWTExpiryMin int
 	CookieSecure bool
+	BotSharedSecret string
 }
 
 func Load() *Config {
@@ -41,6 +42,7 @@ func Load() *Config {
 		JWTSecret:    getEnv("JWT_SECRET", "dev-secret-change-me"),
 		JWTExpiryMin: expiry,
 		CookieSecure: secure,
+		BotSharedSecret: getEnv("BOT_SHARED_SECRET", ""),
 	}
 }
 
