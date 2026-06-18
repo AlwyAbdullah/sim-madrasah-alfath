@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"database/sql"
 	"encoding/json"
 	"net/http"
 
@@ -105,4 +106,15 @@ func (h *Handler) SaveNilai(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.JSON(w, http.StatusOK, map[string]interface{}{"saved": saved})
+}
+
+// recalcNilaiAkhir menulis ulang nilai_akhir baris nilai dari komponen tersimpan
+// (Tugas 30% + UTS 30% + UAS 40%; komponen NULL dianggap 0). Baris harus sudah ada.
+func recalcNilaiAkhir(tx *sql.Tx, santriID, mapelID, periodeID int64) error {
+	_, err := tx.Exec(`
+        UPDATE nilai
+           SET nilai_akhir = ROUND(COALESCE(tugas,0)*0.30 + COALESCE(uts,0)*0.30 + COALESCE(uas,0)*0.40, 2)
+         WHERE santri_id = ? AND mata_pelajaran_id = ? AND periode_id = ?`,
+		santriID, mapelID, periodeID)
+	return err
 }
