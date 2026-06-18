@@ -47,6 +47,7 @@ func main() {
 			r.Post("/auth/login", h.Login)
 		})
 		r.Post("/auth/logout", h.Logout)
+		r.Post("/auth/bot-login", h.BotLogin)
 
 		// Terproteksi (semua guru bisa akses semua kelas — tanpa batasan kelas ampu)
 		r.Group(func(r chi.Router) {
