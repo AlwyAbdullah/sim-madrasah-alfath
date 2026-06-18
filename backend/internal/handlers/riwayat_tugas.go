@@ -22,7 +22,7 @@ func (h *Handler) GetTugas(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.DB.Query(`
         SELECT s.id, s.nama, nt.ke, nt.nilai
         FROM santri s
-        LEFT JOIN nilai_tugas nt
+        LEFT JOIN riwayat_tugas nt
           ON nt.santri_id = s.id AND nt.mata_pelajaran_id = ? AND nt.periode_id = ?
         WHERE s.kelas_id = ? AND s.is_active = 1
         ORDER BY s.nama, nt.ke`, mapelID, periodeID, kelasID)
@@ -137,7 +137,7 @@ func (h *Handler) SaveTugasBatch(w http.ResponseWriter, r *http.Request) {
 	} else {
 		_ = tx.QueryRow(`
             SELECT COALESCE(MAX(nt.ke),0)+1
-            FROM nilai_tugas nt JOIN santri s ON s.id = nt.santri_id
+            FROM riwayat_tugas nt JOIN santri s ON s.id = nt.santri_id
             WHERE s.kelas_id = ? AND nt.mata_pelajaran_id = ? AND nt.periode_id = ?`,
 			req.KelasID, req.MataPelajaranID, req.PeriodeID).Scan(&ke)
 		if ke == 0 {
@@ -146,7 +146,7 @@ func (h *Handler) SaveTugasBatch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	insTugas, err := tx.Prepare(`
-        INSERT INTO nilai_tugas (santri_id, mata_pelajaran_id, periode_id, ke, nilai, created_by)
+        INSERT INTO riwayat_tugas (santri_id, mata_pelajaran_id, periode_id, ke, nilai, created_by)
         VALUES (?, ?, ?, ?, ?, ?)
         ON DUPLICATE KEY UPDATE nilai = VALUES(nilai)`)
 	if err != nil {
@@ -177,7 +177,7 @@ func (h *Handler) SaveTugasBatch(w http.ResponseWriter, r *http.Request) {
 		// 2. hitung rata-rata terbaru untuk santri tsb
 		var avg float64
 		if err := tx.QueryRow(
-			`SELECT ROUND(AVG(nilai),2) FROM nilai_tugas WHERE santri_id=? AND mata_pelajaran_id=? AND periode_id=?`,
+			`SELECT ROUND(AVG(nilai),2) FROM riwayat_tugas WHERE santri_id=? AND mata_pelajaran_id=? AND periode_id=?`,
 			it.SantriID, req.MataPelajaranID, req.PeriodeID).Scan(&avg); err != nil {
 			httpx.Error(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 			return
