@@ -79,8 +79,11 @@ func (h *Handler) SaveNilai(w http.ResponseWriter, r *http.Request) {
 
 	stmt, err := tx.Prepare(`
 		INSERT INTO nilai (santri_id, mata_pelajaran_id, periode_id, tugas, uts, uas, nilai_akhir, created_by)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-		ON DUPLICATE KEY UPDATE tugas=VALUES(tugas), uts=VALUES(uts), uas=VALUES(uas), nilai_akhir=VALUES(nilai_akhir)`)
+		VALUES (?, ?, ?, ?, ?, ?, 0, ?)
+		ON DUPLICATE KEY UPDATE
+		    tugas = COALESCE(VALUES(tugas), tugas),
+		    uts   = COALESCE(VALUES(uts),   uts),
+		    uas   = COALESCE(VALUES(uas),   uas)`)
 	if err != nil {
 		httpx.Error(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
@@ -93,9 +96,12 @@ func (h *Handler) SaveNilai(w http.ResponseWriter, r *http.Request) {
 			httpx.Error(w, http.StatusBadRequest, "INVALID_NILAI", "Nilai harus antara 0 dan 100")
 			return
 		}
-		akhir := models.HitungNilaiAkhir(it.Tugas, it.UTS, it.UAS)
 		if _, err := stmt.Exec(it.SantriID, batch.MataPelajaranID, batch.PeriodeID,
-			it.Tugas, it.UTS, it.UAS, akhir, userID); err != nil {
+			it.Tugas, it.UTS, it.UAS, userID); err != nil {
+			httpx.Error(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+			return
+		}
+		if err := recalcNilaiAkhir(tx, it.SantriID, batch.MataPelajaranID, batch.PeriodeID); err != nil {
 			httpx.Error(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 			return
 		}
