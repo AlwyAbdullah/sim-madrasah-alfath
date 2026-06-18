@@ -47,6 +47,7 @@ func main() {
 			r.Post("/auth/login", h.Login)
 		})
 		r.Post("/auth/logout", h.Logout)
+		r.Post("/auth/bot-login", h.BotLogin)
 
 		// Terproteksi (semua guru bisa akses semua kelas — tanpa batasan kelas ampu)
 		r.Group(func(r chi.Router) {
@@ -79,6 +80,8 @@ func main() {
 			r.Get("/nilai/export", h.ExportNilai)
 			r.Get("/nilai/leger", h.LegerNilai)
 			r.Get("/nilai/leger/export", h.ExportLeger)
+			r.Get("/nilai/tugas", h.GetTugas)
+			r.Post("/nilai/tugas/batch", h.SaveTugasBatch)
 
 			// ===== KHUSUS ADMIN =====
 			r.Group(func(r chi.Router) {
