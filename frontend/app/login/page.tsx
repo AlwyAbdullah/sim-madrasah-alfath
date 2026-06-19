@@ -58,10 +58,6 @@ export default function LoginPage() {
         <button className="btn" style={{ width: "100%" }} disabled={loading}>
           {loading ? "Memproses..." : "Masuk"}
         </button>
-
-        <div className="muted" style={{ fontSize: 12, marginTop: 16, textAlign: "center" }}>
-          Default: admin / admin123
-        </div>
       </form>
     </div>
   );
