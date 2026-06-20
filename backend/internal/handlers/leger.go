@@ -79,6 +79,15 @@ func (h *Handler) buildLeger(kelasID, periodeID string) ([]legerMapel, []legerRo
 	}
 	srows.Close()
 
+	// hanya hitung mapel yang dipetakan ke kelas (kolom yang tampil di leger/rapor).
+	// nilai mapel "yatim" (tak dipetakan, mis. sisa pemetaan lama) diabaikan agar
+	// rata-rata = jumlah nilai mapel tampil / jumlah mapel tampil — bukan dibagi
+	// dengan jumlah seluruh mapel yang kebetulan punya baris nilai.
+	valid := make(map[int64]bool, len(mapels))
+	for _, m := range mapels {
+		valid[m.ID] = true
+	}
+
 	// nilai akhir per santri per mapel
 	nrows, err := h.DB.Query(`
 		SELECT n.santri_id, n.mata_pelajaran_id, n.nilai_akhir
@@ -91,6 +100,9 @@ func (h *Handler) buildLeger(kelasID, periodeID string) ([]legerMapel, []legerRo
 		var sid, mid int64
 		var akhir *float64
 		_ = nrows.Scan(&sid, &mid, &akhir)
+		if !valid[mid] {
+			continue // mapel tak dipetakan ke kelas → tidak ikut dihitung
+		}
 		if i, ok := idx[sid]; ok {
 			rows[i].Nilai[mid] = akhir
 		}
