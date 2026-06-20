@@ -1,14 +1,19 @@
 package models
 
-// Bobot nilai akhir: Tugas 30% + UTS 30% + UAS 40%
+// Bobot nilai akhir.
+// Normal: Tugas 30% + UTS 30% + UAS 40%.
+// Jika Tugas KOSONG (tidak diisi): UTS 40% + UAS 60%.
 const (
 	BobotTugas = 0.30
 	BobotUTS   = 0.30
 	BobotUAS   = 0.40
+	// tanpa tugas
+	BobotUTSNoTugas = 0.40
+	BobotUASNoTugas = 0.60
 )
 
 // HitungNilaiAkhir mengembalikan nilai akhir terbobot.
-// Komponen yang nil dianggap 0.
+// Jika tugas == nil → reweight ke UTS 40% + UAS 60% (komponen lain nil = 0).
 func HitungNilaiAkhir(tugas, uts, uas *float64) float64 {
 	val := func(p *float64) float64 {
 		if p == nil {
@@ -16,8 +21,12 @@ func HitungNilaiAkhir(tugas, uts, uas *float64) float64 {
 		}
 		return *p
 	}
-	akhir := val(tugas)*BobotTugas + val(uts)*BobotUTS + val(uas)*BobotUAS
-	// bulatkan 2 desimal
+	var akhir float64
+	if tugas == nil {
+		akhir = val(uts)*BobotUTSNoTugas + val(uas)*BobotUASNoTugas
+	} else {
+		akhir = val(tugas)*BobotTugas + val(uts)*BobotUTS + val(uas)*BobotUAS
+	}
 	return float64(int(akhir*100+0.5)) / 100
 }
 

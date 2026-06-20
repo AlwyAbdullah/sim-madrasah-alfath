@@ -13,6 +13,19 @@ function tanggalIndo(d = new Date()): string {
   return `${d.getDate()} ${bulan[d.getMonth()]} ${d.getFullYear()}`;
 }
 
+// Kelas tujuan jika NAIK: Sifr A→Kelas 1, Sifr B→Kelas 2, Kelas N→Kelas N+1, Kelas 6→LULUS.
+function naikLabel(kelas: string): string {
+  const k = (kelas || "").trim().toLowerCase();
+  if (k === "sifr a") return "KELAS 1";
+  if (k === "sifr b") return "KELAS 2";
+  const m = k.match(/(\d+)/);
+  if (m) {
+    const n = parseInt(m[1], 10);
+    return n >= 6 ? "LULUS" : `KELAS ${n + 1}`;
+  }
+  return "NAIK KELAS";
+}
+
 // Kepadatan menyesuaikan jumlah mapel; konten dijaga agar muat < 1 halaman,
 // sisanya diisi oleh kotak Catatan yang memuai (flex-grow).
 function density(n: number) {
@@ -30,6 +43,7 @@ export default function RaporPage() {
   const [santriList, setSantriList] = useState<Santri[]>([]);
   const [santriId, setSantriId] = useState("");
   const [data, setData] = useState<any>(null);
+  const [kenaikan, setKenaikan] = useState<"" | "naik" | "tinggal">(""); // pilihan saat semester genap
 
   useEffect(() => {
     api("/kelas?aktif=1").then(setKelas).catch(() => {});
@@ -47,13 +61,16 @@ export default function RaporPage() {
   }, [kelasId]);
 
   useEffect(() => {
+    setKenaikan("");
     if (!santriId || !periodeId) { setData(null); return; }
     api(`/rapor?santri_id=${santriId}&periode_id=${periodeId}`).then(setData).catch(() => {});
   }, [santriId, periodeId]);
 
   const tahunTitle = data?.periode?.tahun_ajaran ? `TAHUN PELAJARAN ${data.periode.tahun_ajaran} H` : "";
-  const semester = data?.periode?.semester === "genap" ? "GENAP" : "GANJIL";
-  const semAngka = data?.periode?.semester === "genap" ? "2" : "1";
+  const isGenap = data?.periode?.semester === "genap";
+  const semester = isGenap ? "GENAP" : "GANJIL";
+  const semAngka = isGenap ? "2" : "1";
+  const labelNaik = data ? naikLabel(data.santri.kelas) : "";
 
   const n = data?.nilai?.length || 0;
   const d = density(n);
@@ -181,6 +198,21 @@ export default function RaporPage() {
               </tr>
             </tbody>
           </table>
+
+          {/* Keterangan kenaikan — hanya semester GENAP (centang salah satu) */}
+          {isGenap && (
+            <div style={{ border: "1px solid #000", padding: d.pad, marginTop: d.gap, display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap" }}>
+              <strong>KETERANGAN :</strong>
+              <label style={{ display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+                <input type="checkbox" checked={kenaikan === "naik"} onChange={() => setKenaikan(kenaikan === "naik" ? "" : "naik")} style={{ width: 16, height: 16 }} />
+                <strong>{labelNaik === "LULUS" ? "LULUS" : `NAIK ${labelNaik}`}</strong>
+              </label>
+              <label style={{ display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+                <input type="checkbox" checked={kenaikan === "tinggal"} onChange={() => setKenaikan(kenaikan === "tinggal" ? "" : "tinggal")} style={{ width: 16, height: 16 }} />
+                <strong>TINGGAL {String(data.santri.kelas).toUpperCase()}</strong>
+              </label>
+            </div>
+          )}
 
           {/* Catatan — memuai mengisi sisa ruang */}
           <div style={{ border: "1px solid #000", padding: d.pad, marginTop: d.gap, fontWeight: 700, flex: "1 1 auto", minHeight: 28 }}>

@@ -13,10 +13,12 @@ type Item = {
   uas: number | null;
 };
 
-// Bobot: Tugas 30% + UTS 30% + UAS 40%
+// Bobot: Tugas 30% + UTS 30% + UAS 40%.
+// Jika Tugas kosong → UTS 40% + UAS 60%.
 function hitungAkhir(t: number | null, u: number | null, a: number | null) {
   const v = (x: number | null) => (x == null ? 0 : x);
-  return Math.round((v(t) * 0.3 + v(u) * 0.3 + v(a) * 0.4) * 100) / 100;
+  if (t == null) return Math.round((v(u) * 0.4 + v(a) * 0.6) * 100) / 100;
+  return Math.round((t * 0.3 + v(u) * 0.3 + v(a) * 0.4) * 100) / 100;
 }
 
 export default function NilaiPage() {
@@ -88,7 +90,7 @@ export default function NilaiPage() {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <h1 style={{ margin: 0 }}>Input Nilai</h1>
-      <p className="muted" style={{ margin: 0 }}>Bobot Nilai Akhir: Tugas 30% + UTS 30% + UAS 40%</p>
+      <p className="muted" style={{ margin: 0 }}>Bobot: Tugas 30% + UTS 30% + UAS 40%. Jika Tugas kosong → UTS 40% + UAS 60%.</p>
 
       <div className="row">
         <select className="input" value={kelasId} onChange={(e) => setKelasId(e.target.value)}>
