@@ -162,8 +162,9 @@ export default function RaporPage() {
   const [data, setData] = useState<any>(null);
   const [kenaikan, setKenaikan] = useState<"" | "naik" | "tinggal">("");
   const [bulk, setBulk] = useState<any[] | null>(null);
-  const [bulkLoading, setBulkLoading] = useState(false);
-  const printed = useRef(false);
+  const [zipState, setZipState] = useState<{ done: number; total: number } | null>(null);
+  const hiddenRef = useRef<HTMLDivElement>(null);
+  const runZip = useRef(false);
 
   useEffect(() => {
     api("/kelas?aktif=1").then(setKelas).catch(() => {});
@@ -186,13 +187,74 @@ export default function RaporPage() {
     api(`/rapor?santri_id=${santriId}&periode_id=${periodeId}`).then(setData).catch(() => {});
   }, [santriId, periodeId]);
 
-  // auto-print saat bulk siap
+  // Saat data bulk siap: render tersembunyi → tiap santri jadi 1 PDF → kemas ke ZIP → unduh.
   useEffect(() => {
-    if (bulk && bulk.length > 0 && !printed.current) {
-      printed.current = true;
-      const t = setTimeout(() => window.print(), 500);
-      return () => clearTimeout(t);
-    }
+    if (!bulk || !runZip.current) return;
+    runZip.current = false;
+    let cancelled = false;
+
+    (async () => {
+      const container = hiddenRef.current;
+      if (!container) { setBulk(null); setZipState(null); return; }
+
+      const [{ default: html2canvas }, { jsPDF }, { default: JSZip }] = await Promise.all([
+        import("html2canvas-pro"),
+        import("jspdf"),
+        import("jszip"),
+      ]);
+
+      // tunggu gambar KOP termuat agar tidak kosong saat di-capture
+      await Promise.all(
+        Array.from(container.querySelectorAll("img")).map((img) =>
+          img.complete ? Promise.resolve() : new Promise((res) => { img.onload = img.onerror = () => res(null); })
+        )
+      );
+      await new Promise((r) => setTimeout(r, 120));
+
+      const pages = Array.from(container.querySelectorAll<HTMLElement>(".rapor-page"));
+      const zip = new JSZip();
+      const dipakai: Record<string, number> = {};
+
+      for (let i = 0; i < pages.length; i++) {
+        if (cancelled) return;
+        const canvas = await html2canvas(pages[i], { scale: 2, useCORS: true, backgroundColor: "#ffffff" });
+        const img = canvas.toDataURL("image/jpeg", 0.92);
+        const pdf = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
+        const pw = 210, ph = 297;
+        let w = pw, h = (canvas.height * pw) / canvas.width;
+        if (h > ph) { h = ph; w = (canvas.width * ph) / canvas.height; }
+        pdf.addImage(img, "JPEG", (pw - w) / 2, (ph - h) / 2, w, h);
+
+        const s = bulk[i]?.santri || {};
+        let base = `Rapor - ${[s.nama, s.kelas].filter(Boolean).join(" - ")}`
+          .replace(/[\\/:*?"<>|]+/g, " ").replace(/\s+/g, " ").trim();
+        if (dipakai[base] != null) base = `${base} (${++dipakai[base]})`; else dipakai[base] = 0;
+        zip.file(`${base}.pdf`, pdf.output("blob"));
+        setZipState({ done: i + 1, total: pages.length });
+      }
+
+      const s0 = bulk[0]?.santri || {};
+      const ta = bulk[0]?.periode?.tahun_ajaran ? ` ${bulk[0].periode.tahun_ajaran}` : "";
+      const zipName = `Rapor ${s0.kelas || "Kelas"}${ta}`
+        .replace(/[\\/:*?"<>|]+/g, " ").replace(/\s+/g, " ").trim();
+
+      const content = await zip.generateAsync({ type: "blob" });
+      const url = URL.createObjectURL(content);
+      const a = document.createElement("a");
+      a.href = url; a.download = `${zipName}.zip`;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
+
+      setBulk(null);
+      setZipState(null);
+    })().catch((e) => {
+      console.error(e);
+      alert("Gagal membuat ZIP: " + (e?.message || e));
+      setBulk(null);
+      setZipState(null);
+    });
+
+    return () => { cancelled = true; };
   }, [bulk]);
 
   const isGenap = data?.periode?.semester === "genap";
@@ -201,34 +263,23 @@ export default function RaporPage() {
     kenaikan === "naik" ? (labelNaik === "LULUS" ? "LULUS" : `NAIK ${labelNaik}`) :
     `TINGGAL ${String(data.santri.kelas).toUpperCase()}`;
 
-  async function cetakSemua() {
-    if (!kelasId || !periodeId) return;
-    setBulkLoading(true);
+  async function unduhZip() {
+    if (!kelasId || !periodeId || zipState) return;
+    setZipState({ done: 0, total: 0 });
     try {
       const list: Santri[] = await api(`/santri?kelas_id=${kelasId}`);
       const hasil: any[] = [];
       for (const s of list) {
         try { hasil.push(await api(`/rapor?santri_id=${s.id}&periode_id=${periodeId}`)); } catch {}
       }
-      printed.current = false;
-      setBulk(hasil);
-    } finally { setBulkLoading(false); }
-  }
-
-  // ===== MODE BULK =====
-  if (bulk) {
-    return (
-      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-        <div className="no-print row" style={{ justifyContent: "space-between" }}>
-          <strong>Pratinjau {bulk.length} rapor — gunakan "Simpan sebagai PDF" di dialog cetak.</strong>
-          <div className="row">
-            <button className="btn" onClick={() => window.print()}>🖨 Cetak lagi</button>
-            <button className="btn secondary" onClick={() => setBulk(null)}>Tutup</button>
-          </div>
-        </div>
-        {bulk.map((d, i) => <RaporSheet key={i} data={d} />)}
-      </div>
-    );
+      if (hasil.length === 0) { setZipState(null); alert("Tidak ada data rapor untuk kelas ini."); return; }
+      setZipState({ done: 0, total: hasil.length });
+      runZip.current = true;
+      setBulk(hasil); // render tersembunyi → memicu useEffect pembuat ZIP
+    } catch (e: any) {
+      setZipState(null);
+      alert("Gagal mengambil data: " + (e?.message || e));
+    }
   }
 
   // ===== MODE SINGLE =====
@@ -250,10 +301,18 @@ export default function RaporPage() {
             {periode.map((p) => <option key={p.id} value={p.id}>{p.nama}</option>)}
           </select>
           <button className="btn" onClick={() => window.print()} disabled={!data}>🖨 Cetak / Simpan PDF</button>
-          <button className="btn secondary" onClick={cetakSemua} disabled={!kelasId || !periodeId || bulkLoading}>
-            {bulkLoading ? "Menyiapkan..." : "⬇ Cetak Semua Sekelas"}
+          <button className="btn secondary" onClick={unduhZip} disabled={!kelasId || !periodeId || !!zipState}>
+            {zipState
+              ? (zipState.total ? `Memproses ${zipState.done}/${zipState.total}…` : "Menyiapkan…")
+              : "⬇ Unduh ZIP per Santri"}
           </button>
         </div>
+
+        {zipState && zipState.total > 0 && (
+          <p className="muted" style={{ margin: 0, fontSize: 13 }}>
+            Membuat PDF {zipState.done}/{zipState.total} santri, lalu dikemas ke satu file ZIP…
+          </p>
+        )}
 
         {/* Pilihan kenaikan (semester genap) — di kontrol, bukan di rapor */}
         {data && isGenap && (
@@ -271,9 +330,15 @@ export default function RaporPage() {
         )}
       </div>
 
-      {!data && <p className="muted no-print">Pilih kelas, santri, dan periode untuk menampilkan rapor. Atau pilih kelas + periode lalu "Cetak Semua Sekelas".</p>}
+      {!data && <p className="muted no-print">Pilih kelas, santri, dan periode untuk menampilkan rapor. Atau pilih kelas + periode lalu "Unduh ZIP per Santri" (1 file PDF per santri).</p>}
 
       {data && <RaporSheet data={data} catatan={catatan} />}
+
+      {/* Kontainer tersembunyi: render rapor untuk di-capture saat membuat ZIP (tidak tampil & tidak ikut tercetak) */}
+      <div ref={hiddenRef} aria-hidden className="no-print"
+        style={{ position: "fixed", left: -10000, top: 0, width: 760, pointerEvents: "none", zIndex: -1 }}>
+        {bulk?.map((d, i) => <RaporSheet key={i} data={d} />)}
+      </div>
     </div>
   );
 }
