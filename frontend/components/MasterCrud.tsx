@@ -35,6 +35,7 @@ export default function MasterCrud({ title, basePath, listPath, columns, fields,
   const [form, setForm] = useState<Record<string, string>>({});
   const [msg, setMsg] = useState("");
   const [saving, setSaving] = useState(false);
+  const [q, setQ] = useState("");
 
   async function load() {
     try {
@@ -115,6 +116,11 @@ export default function MasterCrud({ title, basePath, listPath, columns, fields,
     }
   }
 
+  const ql = q.toLowerCase().trim();
+  const filtered = ql
+    ? rows.filter((r) => Object.values(r).some((v) => v != null && String(v).toLowerCase().includes(ql)))
+    : rows;
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       <div className="row" style={{ justifyContent: "space-between" }}>
@@ -123,6 +129,16 @@ export default function MasterCrud({ title, basePath, listPath, columns, fields,
           {headerExtra && headerExtra(load)}
           <button className="btn" onClick={openCreate}>+ Tambah</button>
         </div>
+      </div>
+
+      <div className="row" style={{ position: "relative", maxWidth: 360 }}>
+        <input className="input" style={{ width: "100%", paddingRight: 28 }}
+          placeholder={`Cari ${title.toLowerCase()}…`}
+          value={q} onChange={(e) => setQ(e.target.value)} />
+        {q && (
+          <button onClick={() => setQ("")} title="Hapus"
+            style={{ position: "absolute", right: 8, top: 8, border: "none", background: "transparent", cursor: "pointer", color: "var(--muted)", fontSize: 16 }}>×</button>
+        )}
       </div>
 
       {msg && <div className="card" style={{ padding: 12 }}>{msg}</div>}
@@ -179,10 +195,12 @@ export default function MasterCrud({ title, basePath, listPath, columns, fields,
             </tr>
           </thead>
           <tbody>
-            {rows.length === 0 && (
-              <tr><td colSpan={columns.length + 1} className="muted" style={{ padding: 16 }}>Belum ada data.</td></tr>
+            {filtered.length === 0 && (
+              <tr><td colSpan={columns.length + 1} className="muted" style={{ padding: 16 }}>
+                {rows.length === 0 ? "Belum ada data." : `Tidak ada hasil untuk "${q}".`}
+              </td></tr>
             )}
-            {rows.map((row) => (
+            {filtered.map((row) => (
               <tr key={row.id}>
                 {columns.map((c) => (
                   <td key={c.key}>{c.render ? c.render(row) : (row[c.key] ?? "-")}</td>
