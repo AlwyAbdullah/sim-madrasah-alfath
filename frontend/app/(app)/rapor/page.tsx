@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 
 type Opt = { id: number; nama: string; is_active?: boolean };
@@ -26,13 +26,130 @@ function naikLabel(kelas: string): string {
   return "NAIK KELAS";
 }
 
-// Kepadatan menyesuaikan jumlah mapel; konten dijaga agar muat < 1 halaman,
-// sisanya diisi oleh kotak Catatan yang memuai (flex-grow).
 function density(n: number) {
   if (n <= 4) return { fz: 13, pad: "5px 9px", kop: 460, title: 15, ar: 12, rowH: 28, gap: 6, sigH: 34 };
   if (n <= 7) return { fz: 12, pad: "4px 7px", kop: 420, title: 13.5, ar: 11, rowH: 22, gap: 5, sigH: 30 };
   if (n <= 10) return { fz: 11, pad: "3px 6px", kop: 380, title: 12.5, ar: 10, rowH: 19, gap: 4, sigH: 26 };
   return { fz: 10, pad: "2px 5px", kop: 340, title: 11.5, ar: 9, rowH: 16, gap: 3, sigH: 22 };
+}
+
+// angka < 60 → merah
+function skor(v: number | null | undefined, base: React.CSSProperties): React.CSSProperties {
+  if (v != null && v < 60) return { ...base, color: "#dc2626" };
+  return base;
+}
+
+// Satu lembar rapor (dipakai single & bulk)
+function RaporSheet({ data, catatan }: { data: any; catatan?: string }) {
+  const d = density(data?.nilai?.length || 0);
+  const td: React.CSSProperties = { border: "1px solid #000", padding: d.pad, verticalAlign: "middle", lineHeight: 1.25 };
+  const th: React.CSSProperties = { ...td, fontWeight: 800, textAlign: "center", background: "#f1f5f9" };
+  const tbl: React.CSSProperties = { width: "100%", borderCollapse: "collapse", fontSize: d.fz };
+  const ar: React.CSSProperties = { fontSize: d.ar, fontWeight: 400, direction: "rtl" };
+  const arIn: React.CSSProperties = { fontSize: d.ar, fontWeight: 400, color: "#333" };
+  const tahunTitle = data.periode?.tahun_ajaran ? `TAHUN PELAJARAN ${data.periode.tahun_ajaran} H` : "";
+  const semester = data.periode?.semester === "genap" ? "GENAP" : "GANJIL";
+  const semAngka = data.periode?.semester === "genap" ? "2" : "1";
+  const tdC = { ...td, textAlign: "center" as const, fontWeight: 700 };
+
+  return (
+    <div className="rapor rapor-page" style={{ background: "#fff", maxWidth: 720, margin: "0 auto", width: "100%", padding: 18, color: "#000", fontSize: d.fz, display: "flex", flexDirection: "column", boxShadow: "var(--shadow)" }}>
+      <img src="/kop-madrasah.png" alt="Madrasah Al Fath" style={{ width: "100%", maxWidth: d.kop, display: "block", margin: "0 auto 3px" }} />
+      <div style={{ borderBottom: "2px solid #000", marginBottom: d.gap }} />
+
+      <div style={{ textAlign: "center", fontWeight: 800, lineHeight: 1.2, marginBottom: d.gap, fontSize: d.title }}>
+        <div>LAPORAN HASIL BELAJAR SANTRI SEMESTER {semester}</div>
+        <div>{tahunTitle}</div>
+      </div>
+
+      <table style={tbl} cellSpacing={0}><tbody>
+        <tr>
+          <td style={{ ...td, width: "18%", fontWeight: 700 }}>NAMA</td>
+          <td style={{ ...td, width: "42%" }}>: {data.santri.nama}</td>
+          <td style={{ ...td, width: "18%", fontWeight: 700 }}>KELAS</td>
+          <td style={{ ...td, width: "22%" }}>: {data.santri.kelas}</td>
+        </tr>
+        <tr>
+          <td style={{ ...td, fontWeight: 700 }}>NO. INDUK</td>
+          <td style={td}>: {data.santri.nis || "-"}</td>
+          <td style={{ ...td, fontWeight: 700 }}>SEMESTER</td>
+          <td style={td}>: {semAngka}</td>
+        </tr>
+      </tbody></table>
+
+      <table style={{ ...tbl, marginTop: d.gap }} cellSpacing={0}>
+        <thead><tr>
+          <th style={{ ...th, width: 36 }}>NO<div style={ar}>رقم</div></th>
+          <th style={th}>PELAJARAN<div style={ar}>المواد الدراسية</div></th>
+          <th style={th}>NAMA KITAB<div style={ar}>اسم الكتاب</div></th>
+          <th style={{ ...th, width: 80 }}>NILAI<div style={ar}>المكتسبة</div></th>
+          <th style={{ ...th, width: 80 }}>RATA-RATA<br />KELAS</th>
+        </tr></thead>
+        <tbody>
+          {data.nilai.length === 0 && (
+            <tr><td style={{ ...td, textAlign: "center", height: d.rowH }} colSpan={5}>Belum ada nilai pada periode ini.</td></tr>
+          )}
+          {data.nilai.map((it: any, i: number) => (
+            <tr key={i}>
+              <td style={{ ...td, textAlign: "center", height: d.rowH }}>{i + 1}</td>
+              <td style={td}>{it.mata_pelajaran}</td>
+              <td style={td}>{it.kitab || "-"}</td>
+              <td style={skor(it.nilai_akhir, tdC)}>{it.nilai_akhir ?? "-"}</td>
+              <td style={skor(it.rata_kelas, { ...td, textAlign: "center" })}>{it.rata_kelas ?? "-"}</td>
+            </tr>
+          ))}
+          <tr>
+            <td style={{ ...td, fontWeight: 700 }} colSpan={3}>JUMLAH NILAI <span style={arIn}>مجموع النتائج</span></td>
+            <td style={tdC} colSpan={2}>{data.jumlah ?? "-"}</td>
+          </tr>
+          <tr>
+            <td style={{ ...td, fontWeight: 700 }} colSpan={3}>RATA-RATA NILAI <span style={arIn}>كمية النتائج</span></td>
+            <td style={skor(data.rata, tdC)} colSpan={2}>{data.rata ?? "-"}</td>
+          </tr>
+          <tr>
+            <td style={{ ...td, fontWeight: 700 }} colSpan={3}>PERINGKAT <span style={arIn}>الرتبة</span></td>
+            <td style={tdC} colSpan={2}>{data.peringkat || "-"}</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <table style={{ ...tbl, marginTop: d.gap }} cellSpacing={0}>
+        <thead><tr><th style={th} colSpan={2}>KETERANGAN</th><th style={th} colSpan={2}>KETERANGAN</th></tr></thead>
+        <tbody>
+          <tr>
+            <td style={{ ...td, width: "30%" }}>SAKIT <span style={arIn}>مريض</span></td>
+            <td style={{ ...td, width: "20%", textAlign: "center" }}>{data.kehadiran.sakit}</td>
+            <td style={{ ...td, width: "30%" }}>KELAKUAN <span style={arIn}>السلوك</span></td>
+            <td style={{ ...td, width: "20%" }}></td>
+          </tr>
+          <tr>
+            <td style={td}>IZIN <span style={arIn}>عذر</span></td>
+            <td style={{ ...td, textAlign: "center" }}>{data.kehadiran.izin}</td>
+            <td style={td}>KETEKUNAN <span style={arIn}>مواظبة</span></td>
+            <td style={td}></td>
+          </tr>
+          <tr>
+            <td style={td}>ABSEN <span style={arIn}>لغير عذر</span></td>
+            <td style={{ ...td, textAlign: "center" }}>{data.kehadiran.alpha}</td>
+            <td style={td}>KEBERSIHAN <span style={arIn}>النظافة</span></td>
+            <td style={td}></td>
+          </tr>
+        </tbody>
+      </table>
+
+      {/* Catatan (memuai) — memuat teks kenaikan jika ada */}
+      <div style={{ border: "1px solid #000", padding: d.pad, marginTop: d.gap, flex: "1 1 auto", minHeight: 28 }}>
+        <strong>CATATAN <span style={arIn}>الإرشادات</span> :</strong>
+        {catatan && <span style={{ fontWeight: 800, marginLeft: 8 }}>{catatan}</span>}
+      </div>
+
+      <div style={{ display: "flex", justifyContent: "space-between", marginTop: d.gap + 4, textAlign: "center", fontSize: d.fz }}>
+        <div style={{ width: "32%" }}><div>Wali Santri</div><div style={ar}>ولي الطالب</div><div style={{ height: d.sigH }} /><div>(......................)</div></div>
+        <div style={{ width: "32%" }}><div>Wali Kelas</div><div style={ar}>ولي الفصل</div><div style={{ height: d.sigH }} /><div>(......................)</div></div>
+        <div style={{ width: "32%" }}><div>Malang, {tanggalIndo()}</div><div>Mudir Madrasah</div><div style={{ height: d.sigH }} /><div style={{ fontWeight: 700 }}>( {MUDIR} )</div></div>
+      </div>
+    </div>
+  );
 }
 
 export default function RaporPage() {
@@ -43,7 +160,10 @@ export default function RaporPage() {
   const [santriList, setSantriList] = useState<Santri[]>([]);
   const [santriId, setSantriId] = useState("");
   const [data, setData] = useState<any>(null);
-  const [kenaikan, setKenaikan] = useState<"" | "naik" | "tinggal">(""); // pilihan saat semester genap
+  const [kenaikan, setKenaikan] = useState<"" | "naik" | "tinggal">("");
+  const [bulk, setBulk] = useState<any[] | null>(null);
+  const [bulkLoading, setBulkLoading] = useState(false);
+  const printed = useRef(false);
 
   useEffect(() => {
     api("/kelas?aktif=1").then(setKelas).catch(() => {});
@@ -66,23 +186,55 @@ export default function RaporPage() {
     api(`/rapor?santri_id=${santriId}&periode_id=${periodeId}`).then(setData).catch(() => {});
   }, [santriId, periodeId]);
 
-  const tahunTitle = data?.periode?.tahun_ajaran ? `TAHUN PELAJARAN ${data.periode.tahun_ajaran} H` : "";
+  // auto-print saat bulk siap
+  useEffect(() => {
+    if (bulk && bulk.length > 0 && !printed.current) {
+      printed.current = true;
+      const t = setTimeout(() => window.print(), 500);
+      return () => clearTimeout(t);
+    }
+  }, [bulk]);
+
   const isGenap = data?.periode?.semester === "genap";
-  const semester = isGenap ? "GENAP" : "GANJIL";
-  const semAngka = isGenap ? "2" : "1";
   const labelNaik = data ? naikLabel(data.santri.kelas) : "";
+  const catatan = !isGenap || !kenaikan ? "" :
+    kenaikan === "naik" ? (labelNaik === "LULUS" ? "LULUS" : `NAIK ${labelNaik}`) :
+    `TINGGAL ${String(data.santri.kelas).toUpperCase()}`;
 
-  const n = data?.nilai?.length || 0;
-  const d = density(n);
-  const td: React.CSSProperties = { border: "1px solid #000", padding: d.pad, verticalAlign: "middle", lineHeight: 1.25 };
-  const th: React.CSSProperties = { ...td, fontWeight: 800, textAlign: "center", background: "#f1f5f9" };
-  const tbl: React.CSSProperties = { width: "100%", borderCollapse: "collapse", fontSize: d.fz };
-  const ar: React.CSSProperties = { fontSize: d.ar, fontWeight: 400, direction: "rtl" };
-  const arIn: React.CSSProperties = { fontSize: d.ar, fontWeight: 400, color: "#333" };
+  async function cetakSemua() {
+    if (!kelasId || !periodeId) return;
+    setBulkLoading(true);
+    try {
+      const list: Santri[] = await api(`/santri?kelas_id=${kelasId}`);
+      const hasil: any[] = [];
+      for (const s of list) {
+        try { hasil.push(await api(`/rapor?santri_id=${s.id}&periode_id=${periodeId}`)); } catch {}
+      }
+      printed.current = false;
+      setBulk(hasil);
+    } finally { setBulkLoading(false); }
+  }
 
+  // ===== MODE BULK =====
+  if (bulk) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        <div className="no-print row" style={{ justifyContent: "space-between" }}>
+          <strong>Pratinjau {bulk.length} rapor — gunakan "Simpan sebagai PDF" di dialog cetak.</strong>
+          <div className="row">
+            <button className="btn" onClick={() => window.print()}>🖨 Cetak lagi</button>
+            <button className="btn secondary" onClick={() => setBulk(null)}>Tutup</button>
+          </div>
+        </div>
+        {bulk.map((d, i) => <RaporSheet key={i} data={d} />)}
+      </div>
+    );
+  }
+
+  // ===== MODE SINGLE =====
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <div className="no-print" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <div className="no-print" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         <h1 style={{ margin: 0 }}>Rapor Santri</h1>
         <div className="row">
           <select className="input" value={kelasId} onChange={(e) => setKelasId(e.target.value)}>
@@ -98,150 +250,30 @@ export default function RaporPage() {
             {periode.map((p) => <option key={p.id} value={p.id}>{p.nama}</option>)}
           </select>
           <button className="btn" onClick={() => window.print()} disabled={!data}>🖨 Cetak / Simpan PDF</button>
+          <button className="btn secondary" onClick={cetakSemua} disabled={!kelasId || !periodeId || bulkLoading}>
+            {bulkLoading ? "Menyiapkan..." : "⬇ Cetak Semua Sekelas"}
+          </button>
         </div>
+
+        {/* Pilihan kenaikan (semester genap) — di kontrol, bukan di rapor */}
+        {data && isGenap && (
+          <div className="row" style={{ fontSize: 13 }}>
+            <span className="muted">Keterangan kenaikan (muncul di Catatan):</span>
+            <label style={{ display: "inline-flex", alignItems: "center", gap: 5, cursor: "pointer" }}>
+              <input type="checkbox" checked={kenaikan === "naik"} onChange={() => setKenaikan(kenaikan === "naik" ? "" : "naik")} />
+              {labelNaik === "LULUS" ? "LULUS" : `NAIK ${labelNaik}`}
+            </label>
+            <label style={{ display: "inline-flex", alignItems: "center", gap: 5, cursor: "pointer" }}>
+              <input type="checkbox" checked={kenaikan === "tinggal"} onChange={() => setKenaikan(kenaikan === "tinggal" ? "" : "tinggal")} />
+              TINGGAL {String(data.santri.kelas).toUpperCase()}
+            </label>
+          </div>
+        )}
       </div>
 
-      {!data && <p className="muted no-print">Pilih kelas, santri, dan periode untuk menampilkan rapor.</p>}
+      {!data && <p className="muted no-print">Pilih kelas, santri, dan periode untuk menampilkan rapor. Atau pilih kelas + periode lalu "Cetak Semua Sekelas".</p>}
 
-      {data && (
-        <div className="rapor rapor-page" style={{ background: "#fff", maxWidth: 720, margin: "0 auto", width: "100%", padding: 18, color: "#000", fontSize: d.fz, display: "flex", flexDirection: "column", boxShadow: "var(--shadow)" }}>
-          {/* KOP */}
-          <img src="/kop-madrasah.png" alt="Madrasah Al Fath" style={{ width: "100%", maxWidth: d.kop, display: "block", margin: "0 auto 3px" }} />
-          <div style={{ borderBottom: "2px solid #000", marginBottom: d.gap }} />
-
-          {/* Judul */}
-          <div style={{ textAlign: "center", fontWeight: 800, lineHeight: 1.2, marginBottom: d.gap, fontSize: d.title }}>
-            <div>LAPORAN HASIL BELAJAR SANTRI SEMESTER {semester}</div>
-            <div>{tahunTitle}</div>
-          </div>
-
-          {/* Identitas */}
-          <table style={tbl} cellSpacing={0}>
-            <tbody>
-              <tr>
-                <td style={{ ...td, width: "18%", fontWeight: 700 }}>NAMA</td>
-                <td style={{ ...td, width: "42%" }}>: {data.santri.nama}</td>
-                <td style={{ ...td, width: "18%", fontWeight: 700 }}>KELAS</td>
-                <td style={{ ...td, width: "22%" }}>: {data.santri.kelas}</td>
-              </tr>
-              <tr>
-                <td style={{ ...td, fontWeight: 700 }}>NO. INDUK</td>
-                <td style={td}>: {data.santri.nis || "-"}</td>
-                <td style={{ ...td, fontWeight: 700 }}>SEMESTER</td>
-                <td style={td}>: {semAngka}</td>
-              </tr>
-            </tbody>
-          </table>
-
-          {/* Nilai */}
-          <table style={{ ...tbl, marginTop: d.gap }} cellSpacing={0}>
-            <thead>
-              <tr>
-                <th style={{ ...th, width: 36 }}>NO<div style={ar}>رقم</div></th>
-                <th style={th}>PELAJARAN<div style={ar}>المواد الدراسية</div></th>
-                <th style={th}>NAMA KITAB<div style={ar}>اسم الكتاب</div></th>
-                <th style={{ ...th, width: 80 }}>NILAI<div style={ar}>المكتسبة</div></th>
-                <th style={{ ...th, width: 80 }}>RATA-RATA<br />KELAS</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.nilai.length === 0 && (
-                <tr><td style={{ ...td, textAlign: "center", height: d.rowH }} colSpan={5}>Belum ada nilai pada periode ini.</td></tr>
-              )}
-              {data.nilai.map((it: any, i: number) => (
-                <tr key={i}>
-                  <td style={{ ...td, textAlign: "center", height: d.rowH }}>{i + 1}</td>
-                  <td style={td}>{it.mata_pelajaran}</td>
-                  <td style={td}>{it.kitab || "-"}</td>
-                  <td style={{ ...td, textAlign: "center", fontWeight: 700 }}>{it.nilai_akhir ?? "-"}</td>
-                  <td style={{ ...td, textAlign: "center" }}>{it.rata_kelas ?? "-"}</td>
-                </tr>
-              ))}
-              <tr>
-                <td style={{ ...td, fontWeight: 700 }} colSpan={3}>JUMLAH NILAI <span style={arIn}>مجموع النتائج</span></td>
-                <td style={{ ...td, textAlign: "center", fontWeight: 700 }} colSpan={2}>{data.jumlah ?? "-"}</td>
-              </tr>
-              <tr>
-                <td style={{ ...td, fontWeight: 700 }} colSpan={3}>RATA-RATA NILAI <span style={arIn}>كمية النتائج</span></td>
-                <td style={{ ...td, textAlign: "center", fontWeight: 700 }} colSpan={2}>{data.rata ?? "-"}</td>
-              </tr>
-              <tr>
-                <td style={{ ...td, fontWeight: 700 }} colSpan={3}>PERINGKAT <span style={arIn}>الرتبة</span></td>
-                <td style={{ ...td, textAlign: "center", fontWeight: 700 }} colSpan={2}>{data.peringkat || "-"}</td>
-              </tr>
-            </tbody>
-          </table>
-
-          {/* Keterangan */}
-          <table style={{ ...tbl, marginTop: d.gap }} cellSpacing={0}>
-            <thead>
-              <tr><th style={th} colSpan={2}>KETERANGAN</th><th style={th} colSpan={2}>KETERANGAN</th></tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td style={{ ...td, width: "30%" }}>SAKIT <span style={arIn}>مريض</span></td>
-                <td style={{ ...td, width: "20%", textAlign: "center" }}>{data.kehadiran.sakit}</td>
-                <td style={{ ...td, width: "30%" }}>KELAKUAN <span style={arIn}>السلوك</span></td>
-                <td style={{ ...td, width: "20%" }}></td>
-              </tr>
-              <tr>
-                <td style={td}>IZIN <span style={arIn}>عذر</span></td>
-                <td style={{ ...td, textAlign: "center" }}>{data.kehadiran.izin}</td>
-                <td style={td}>KETEKUNAN <span style={arIn}>مواظبة</span></td>
-                <td style={td}></td>
-              </tr>
-              <tr>
-                <td style={td}>ABSEN <span style={arIn}>لغير عذر</span></td>
-                <td style={{ ...td, textAlign: "center" }}>{data.kehadiran.alpha}</td>
-                <td style={td}>KEBERSIHAN <span style={arIn}>النظافة</span></td>
-                <td style={td}></td>
-              </tr>
-            </tbody>
-          </table>
-
-          {/* Keterangan kenaikan — hanya semester GENAP (centang salah satu) */}
-          {isGenap && (
-            <div style={{ border: "1px solid #000", padding: d.pad, marginTop: d.gap, display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap" }}>
-              <strong>KETERANGAN :</strong>
-              <label style={{ display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
-                <input type="checkbox" checked={kenaikan === "naik"} onChange={() => setKenaikan(kenaikan === "naik" ? "" : "naik")} style={{ width: 16, height: 16 }} />
-                <strong>{labelNaik === "LULUS" ? "LULUS" : `NAIK ${labelNaik}`}</strong>
-              </label>
-              <label style={{ display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
-                <input type="checkbox" checked={kenaikan === "tinggal"} onChange={() => setKenaikan(kenaikan === "tinggal" ? "" : "tinggal")} style={{ width: 16, height: 16 }} />
-                <strong>TINGGAL {String(data.santri.kelas).toUpperCase()}</strong>
-              </label>
-            </div>
-          )}
-
-          {/* Catatan — memuai mengisi sisa ruang */}
-          <div style={{ border: "1px solid #000", padding: d.pad, marginTop: d.gap, fontWeight: 700, flex: "1 1 auto", minHeight: 28 }}>
-            CATATAN <span style={arIn}>الإرشادات</span> :
-          </div>
-
-          {/* Tanda tangan — menempel di bawah */}
-          <div style={{ display: "flex", justifyContent: "space-between", marginTop: d.gap + 4, textAlign: "center", fontSize: d.fz }}>
-            <div style={{ width: "32%" }}>
-              <div>Wali Santri</div>
-              <div style={ar}>ولي الطالب</div>
-              <div style={{ height: d.sigH }} />
-              <div>(......................)</div>
-            </div>
-            <div style={{ width: "32%" }}>
-              <div>Wali Kelas</div>
-              <div style={ar}>ولي الفصل</div>
-              <div style={{ height: d.sigH }} />
-              <div>(......................)</div>
-            </div>
-            <div style={{ width: "32%" }}>
-              <div>Malang, {tanggalIndo()}</div>
-              <div>Mudir Madrasah</div>
-              <div style={{ height: d.sigH }} />
-              <div style={{ fontWeight: 700 }}>( {MUDIR} )</div>
-            </div>
-          </div>
-        </div>
-      )}
+      {data && <RaporSheet data={data} catatan={catatan} />}
     </div>
   );
 }

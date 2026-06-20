@@ -97,6 +97,8 @@ tbody tr:last-child td { border-bottom: none; }
   .rapor { box-shadow: none !important; border: none !important; padding: 0 !important; }
   .rapor table, .rapor img { page-break-inside: avoid; }
   .rapor-page { min-height: 0 !important; height: 25.3cm !important; overflow: hidden; }
+  /* bulk: tiap rapor di halaman sendiri */
+  .rapor-page + .rapor-page { break-before: page; }
   @page { margin: 8mm; }
 }
 .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
