@@ -52,7 +52,7 @@ func (h *Handler) GetNilai(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// POST /nilai/batch — upsert + hitung nilai akhir (Tugas 30% + UTS 30% + UAS 40%).
+// POST /nilai/batch — upsert + hitung nilai akhir (lihat recalcNilaiAkhir untuk tiering bobot).
 func (h *Handler) SaveNilai(w http.ResponseWriter, r *http.Request) {
 	var batch models.NilaiBatch
 	if err := json.NewDecoder(r.Body).Decode(&batch); err != nil {
@@ -115,12 +115,17 @@ func (h *Handler) SaveNilai(w http.ResponseWriter, r *http.Request) {
 }
 
 // recalcNilaiAkhir menulis ulang nilai_akhir dari komponen tersimpan.
-// Normal: Tugas 30% + UTS 30% + UAS 40%.
-// Jika Tugas KOSONG (NULL): UTS 40% + UAS 60% (tugas dikeluarkan dari bobot).
+// Bobot menyesuaikan komponen yang terisi:
+//   - Lengkap (ada Tugas):  Tugas 30% + UTS 30% + UAS 40%
+//   - Tanpa Tugas:          UTS 40% + UAS 60%
+//   - Tanpa Tugas & UTS:    UAS 100% (hanya UAS)
+//   - Semua kosong:         NULL
 func recalcNilaiAkhir(tx *sql.Tx, santriID, mapelID, periodeID int64) error {
 	_, err := tx.Exec(`
         UPDATE nilai
            SET nilai_akhir = CASE
+               WHEN tugas IS NULL AND uts IS NULL AND uas IS NULL THEN NULL
+               WHEN tugas IS NULL AND uts IS NULL THEN ROUND(uas, 2)
                WHEN tugas IS NULL
                    THEN ROUND(COALESCE(uts,0)*0.40 + COALESCE(uas,0)*0.60, 2)
                ELSE ROUND(tugas*0.30 + COALESCE(uts,0)*0.30 + COALESCE(uas,0)*0.40, 2)

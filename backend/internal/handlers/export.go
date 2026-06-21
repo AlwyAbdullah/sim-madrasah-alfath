@@ -48,7 +48,7 @@ func (h *Handler) ExportNilai(w http.ResponseWriter, r *http.Request) {
 	// judul
 	f.SetCellValue(sheet, "A1", "DAFTAR NILAI")
 	f.SetCellValue(sheet, "A2", fmt.Sprintf("Kelas: %s   |   Mata Pelajaran: %s   |   Periode: %s", kelasNama, mapelNama, periodeNama))
-	f.SetCellValue(sheet, "A3", "Bobot: Tugas 30% + UTS 30% + UAS 40%")
+	f.SetCellValue(sheet, "A3", "Bobot: Tugas 30% + UTS 30% + UAS 40% (tanpa Tugas: UTS 40% + UAS 60%; hanya UAS: 100%)")
 	f.MergeCell(sheet, "A1", "F1")
 	f.MergeCell(sheet, "A2", "F2")
 	f.MergeCell(sheet, "A3", "F3")

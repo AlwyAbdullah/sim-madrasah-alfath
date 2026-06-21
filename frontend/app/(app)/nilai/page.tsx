@@ -14,11 +14,14 @@ type Item = {
 };
 
 // Bobot: Tugas 30% + UTS 30% + UAS 40%.
-// Jika Tugas kosong → UTS 40% + UAS 60%.
-function hitungAkhir(t: number | null, u: number | null, a: number | null) {
+// Jika Tugas kosong → UTS 40% + UAS 60%. Jika Tugas & UTS kosong → UAS 100%.
+function hitungAkhir(t: number | null, u: number | null, a: number | null): number | null {
   const v = (x: number | null) => (x == null ? 0 : x);
-  if (t == null) return Math.round((v(u) * 0.4 + v(a) * 0.6) * 100) / 100;
-  return Math.round((t * 0.3 + v(u) * 0.3 + v(a) * 0.4) * 100) / 100;
+  const r = (n: number) => Math.round(n * 100) / 100;
+  if (t == null && u == null && a == null) return null; // belum ada nilai
+  if (t == null && u == null) return r(v(a));           // hanya UAS → 100%
+  if (t == null) return r(v(u) * 0.4 + v(a) * 0.6);     // tanpa Tugas → 40/60
+  return r(t * 0.3 + v(u) * 0.3 + v(a) * 0.4);          // lengkap → 30/30/40
 }
 
 export default function NilaiPage() {
@@ -90,7 +93,7 @@ export default function NilaiPage() {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <h1 style={{ margin: 0 }}>Input Nilai</h1>
-      <p className="muted" style={{ margin: 0 }}>Bobot: Tugas 30% + UTS 30% + UAS 40%. Jika Tugas kosong → UTS 40% + UAS 60%.</p>
+      <p className="muted" style={{ margin: 0 }}>Bobot: Tugas 30% + UTS 30% + UAS 40%. Jika Tugas kosong → UTS 40% + UAS 60%. Jika Tugas &amp; UTS kosong → UAS 100%.</p>
 
       <div className="row">
         <select className="input" value={kelasId} onChange={(e) => setKelasId(e.target.value)}>
@@ -139,7 +142,7 @@ export default function NilaiPage() {
                         value={it[f] ?? ""} onChange={(e) => setVal(it.santri_id, f, e.target.value)} />
                     </td>
                   ))}
-                  <td><strong>{hitungAkhir(it.tugas, it.uts, it.uas)}</strong></td>
+                  <td><strong>{hitungAkhir(it.tugas, it.uts, it.uas) ?? "-"}</strong></td>
                 </tr>
               ))}
             </tbody>
