@@ -160,7 +160,7 @@ export default function RaporPage() {
   const [santriList, setSantriList] = useState<Santri[]>([]);
   const [santriId, setSantriId] = useState("");
   const [data, setData] = useState<any>(null);
-  const [kenaikan, setKenaikan] = useState<"" | "naik" | "tinggal">("");
+  const [catatan, setCatatan] = useState("");
   const [bulk, setBulk] = useState<any[] | null>(null);
   const [zipState, setZipState] = useState<{ done: number; total: number } | null>(null);
   const hiddenRef = useRef<HTMLDivElement>(null);
@@ -182,9 +182,17 @@ export default function RaporPage() {
   }, [kelasId]);
 
   useEffect(() => {
-    setKenaikan("");
-    if (!santriId || !periodeId) { setData(null); return; }
-    api(`/rapor?santri_id=${santriId}&periode_id=${periodeId}`).then(setData).catch(() => {});
+    if (!santriId || !periodeId) { setData(null); setCatatan(""); return; }
+    api(`/rapor?santri_id=${santriId}&periode_id=${periodeId}`).then((d) => {
+      setData(d);
+      // Saran awal catatan untuk semester genap (boleh diedit / dikosongkan).
+      if (d?.periode?.semester === "genap") {
+        const lbl = naikLabel(d.santri.kelas);
+        setCatatan(lbl === "LULUS" ? "LULUS" : `NAIK ${lbl}`);
+      } else {
+        setCatatan("");
+      }
+    }).catch(() => {});
   }, [santriId, periodeId]);
 
   // Saat data bulk siap: render tersembunyi → tiap santri jadi 1 PDF → kemas ke ZIP → unduh.
@@ -257,12 +265,6 @@ export default function RaporPage() {
     return () => { cancelled = true; };
   }, [bulk]);
 
-  const isGenap = data?.periode?.semester === "genap";
-  const labelNaik = data ? naikLabel(data.santri.kelas) : "";
-  const catatan = !isGenap || !kenaikan ? "" :
-    kenaikan === "naik" ? (labelNaik === "LULUS" ? "LULUS" : `NAIK ${labelNaik}`) :
-    `TINGGAL ${String(data.santri.kelas).toUpperCase()}`;
-
   async function unduhZip() {
     if (!kelasId || !periodeId || zipState) return;
     setZipState({ done: 0, total: 0 });
@@ -314,18 +316,16 @@ export default function RaporPage() {
           </p>
         )}
 
-        {/* Pilihan kenaikan (semester genap) — di kontrol, bukan di rapor */}
-        {data && isGenap && (
-          <div className="row" style={{ fontSize: 13 }}>
-            <span className="muted">Keterangan kenaikan (muncul di Catatan):</span>
-            <label style={{ display: "inline-flex", alignItems: "center", gap: 5, cursor: "pointer" }}>
-              <input type="checkbox" checked={kenaikan === "naik"} onChange={() => setKenaikan(kenaikan === "naik" ? "" : "naik")} />
-              {labelNaik === "LULUS" ? "LULUS" : `NAIK ${labelNaik}`}
-            </label>
-            <label style={{ display: "inline-flex", alignItems: "center", gap: 5, cursor: "pointer" }}>
-              <input type="checkbox" checked={kenaikan === "tinggal"} onChange={() => setKenaikan(kenaikan === "tinggal" ? "" : "tinggal")} />
-              TINGGAL {String(data.santri.kelas).toUpperCase()}
-            </label>
+        {/* Catatan rapor (mis. keterangan kenaikan) — diketik bebas, tampil di bagian Catatan */}
+        {data && (
+          <div className="row" style={{ fontSize: 13, alignItems: "center" }}>
+            <span className="muted" style={{ whiteSpace: "nowrap" }}>Catatan (muncul di rapor):</span>
+            <input className="input" style={{ flex: 1, minWidth: 280 }}
+              value={catatan} onChange={(e) => setCatatan(e.target.value)}
+              placeholder='mis. "NAIK KELAS 4", "TINGGAL KELAS 3", atau catatan lain' />
+            {catatan && (
+              <button type="button" className="btn secondary" style={{ padding: "6px 10px" }} onClick={() => setCatatan("")}>Kosongkan</button>
+            )}
           </div>
         )}
       </div>
