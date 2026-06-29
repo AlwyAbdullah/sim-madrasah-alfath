@@ -98,8 +98,15 @@ func (h *Handler) GetCatatan(w http.ResponseWriter, r *http.Request) {
 	out := []catatanRow{}
 	for rows.Next() {
 		var c catatanRow
-		_ = rows.Scan(&c.ID, &c.SantriID, &c.Tanggal, &c.Teks, &c.CreatedBy, &c.CreatedAt)
+		if err := rows.Scan(&c.ID, &c.SantriID, &c.Tanggal, &c.Teks, &c.CreatedBy, &c.CreatedAt); err != nil {
+			httpx.Error(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+			return
+		}
 		out = append(out, c)
+	}
+	if err := rows.Err(); err != nil {
+		httpx.Error(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+		return
 	}
 	httpx.JSON(w, http.StatusOK, out)
 }
