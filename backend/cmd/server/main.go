@@ -87,6 +87,10 @@ func main() {
 			r.Get("/catatan", h.GetCatatan)
 			r.Post("/catatan", h.CreateCatatan)
 
+			// Tugas/PR (Fase B)
+			r.Get("/tugas", h.GetTugasList)
+			r.Post("/tugas", h.CreateTugas)
+
 			// ===== KHUSUS ADMIN =====
 			r.Group(func(r chi.Router) {
 				r.Use(middleware.RequireRole("admin"))
