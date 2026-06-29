@@ -11,6 +11,7 @@ export default function UsersMaster() {
         { key: "username", label: "Username" },
         { key: "nama", label: "Nama" },
         { key: "role", label: "Role" },
+        { key: "telegram_user_id", label: "Telegram ID", render: (r) => r.telegram_user_id ?? "-" },
         { key: "is_active", label: "Status", render: (r) => (r.is_active ? "Aktif" : "Nonaktif") },
       ]}
       fields={[
@@ -25,6 +26,7 @@ export default function UsersMaster() {
           ],
         },
         { key: "password", label: "Password", type: "password", required: true, optionalOnEdit: true },
+        { key: "telegram_user_id", label: "Telegram User ID", type: "number", placeholder: "mis. 123456789 (kosongkan jika tidak pakai bot)" },
         { key: "is_active", label: "Status", type: "boolean", hideOnCreate: true },
       ]}
     />
