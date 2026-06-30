@@ -20,6 +20,7 @@ const ADMIN_NAV = [
 
 const MASTER_NAV = [
   { href: "/master/santri", label: "Santri", icon: "🧑‍🎓" },
+  { href: "/master/guru", label: "Guru", icon: "👨‍🏫" },
   { href: "/master/kelas", label: "Kelas", icon: "🏫" },
   { href: "/master/pelajaran-kelas", label: "Pelajaran per Kelas", icon: "🔗" },
   { href: "/master/mapel", label: "Mata Pelajaran", icon: "📚" },
