@@ -102,6 +102,7 @@ func main() {
 				r.Put("/santri/{id}", h.UpdateSantri)
 				r.Delete("/santri/{id}", h.DeleteSantri)
 				r.Post("/santri/import", h.ImportSantri)
+				r.Post("/santri/naik-kelas", h.NaikKelas)
 
 				r.Post("/mata-pelajaran", h.CreateMapel)
 				r.Put("/mata-pelajaran/{id}", h.UpdateMapel)

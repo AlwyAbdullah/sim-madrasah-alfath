@@ -24,6 +24,7 @@ const KEPEG_NAV = [
 
 const MASTER_NAV = [
   { href: "/master/santri", label: "Santri", icon: "🧑‍🎓" },
+  { href: "/naik-kelas", label: "Naik Kelas", icon: "⬆️" },
   { href: "/master/guru", label: "Guru", icon: "👨‍🏫" },
   { href: "/master/kelas", label: "Kelas", icon: "🏫" },
   { href: "/master/pelajaran-kelas", label: "Pelajaran per Kelas", icon: "🔗" },
