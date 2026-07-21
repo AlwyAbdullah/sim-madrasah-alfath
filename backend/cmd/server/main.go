@@ -124,6 +124,12 @@ func main() {
 				r.Post("/guru", h.CreateGuru)
 				r.Put("/guru/{id}", h.UpdateGuru)
 				r.Delete("/guru/{id}", h.DeleteGuru)
+
+				// Absensi guru + rekap (bulan/semester/tahun)
+				r.Get("/absensi-guru", h.GetAbsensiGuru)
+				r.Post("/absensi-guru/batch", h.SaveAbsensiGuru)
+				r.Get("/absensi-guru/rekap", h.RekapAbsensiGuru)
+				r.Get("/absensi-guru/export", h.ExportAbsensiGuru)
 			})
 		})
 	})
