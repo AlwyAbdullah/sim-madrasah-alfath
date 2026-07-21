@@ -105,6 +105,11 @@ func (h *Handler) SaveNilai(w http.ResponseWriter, r *http.Request) {
 			httpx.Error(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 			return
 		}
+		// catat kelas santri untuk periode ini (riwayat kelas per periode)
+		if err := enrollSantriTx(tx, it.SantriID, batch.KelasID, batch.PeriodeID); err != nil {
+			httpx.Error(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+			return
+		}
 		saved++
 	}
 	if err := tx.Commit(); err != nil {
