@@ -69,8 +69,9 @@ export default function AbsensiGuruPage() {
   }, {} as Record<string, number>);
 
   async function simpan() {
-    const belum = items.filter((i) => !i.status);
-    if (belum.length > 0) { setMsg(`${belum.length} guru belum ditandai.`); return; }
+    // Tidak wajib semua terisi — simpan hanya guru yang sudah ditandai, sisanya dilewati.
+    const terisi = items.filter((i) => i.status);
+    if (terisi.length === 0) { setMsg("Belum ada guru yang ditandai."); return; }
     setSaving(true);
     setMsg("");
     try {
@@ -78,10 +79,11 @@ export default function AbsensiGuruPage() {
         method: "POST",
         body: {
           tanggal,
-          items: items.map((i) => ({ guru_id: i.guru_id, status: i.status, keterangan: i.keterangan || null })),
+          items: terisi.map((i) => ({ guru_id: i.guru_id, status: i.status, keterangan: i.keterangan || null })),
         },
       });
-      setMsg(`Tersimpan: ${d.saved} guru.`);
+      const dilewati = items.length - terisi.length;
+      setMsg(`Tersimpan: ${d.saved} guru.` + (dilewati > 0 ? ` (${dilewati} belum ditandai — dilewati)` : ""));
       loadRekap().catch(() => {});
     } catch (e: any) {
       setMsg(e.message);
