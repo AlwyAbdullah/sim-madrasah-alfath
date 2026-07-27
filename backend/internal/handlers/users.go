@@ -2,44 +2,58 @@ package handlers
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 
 	"sim-madrasah/backend/internal/auth"
 	"sim-madrasah/backend/internal/httpx"
+	"sim-madrasah/backend/internal/waid"
 )
 
 func (h *Handler) ListUsers(w http.ResponseWriter, r *http.Request) {
-	rows, err := h.DB.Query(`SELECT id, username, nama, role, is_active, telegram_user_id FROM users ORDER BY username`)
+	rows, err := h.DB.Query(`SELECT id, username, nama, role, is_active, whatsapp_number FROM users ORDER BY username`)
 	if err != nil {
 		dbErr(w, err)
 		return
 	}
 	defer rows.Close()
 	type u struct {
-		ID             int64  `json:"id"`
-		Username       string `json:"username"`
-		Nama           string `json:"nama"`
-		Role           string `json:"role"`
-		IsActive       bool   `json:"is_active"`
-		TelegramUserID *int64 `json:"telegram_user_id"`
+		ID             int64   `json:"id"`
+		Username       string  `json:"username"`
+		Nama           string  `json:"nama"`
+		Role           string  `json:"role"`
+		IsActive       bool    `json:"is_active"`
+		WhatsappNumber *string `json:"whatsapp_number"`
 	}
 	out := []u{}
 	for rows.Next() {
 		var x u
-		_ = rows.Scan(&x.ID, &x.Username, &x.Nama, &x.Role, &x.IsActive, &x.TelegramUserID)
+		_ = rows.Scan(&x.ID, &x.Username, &x.Nama, &x.Role, &x.IsActive, &x.WhatsappNumber)
 		out = append(out, x)
 	}
 	httpx.JSON(w, http.StatusOK, out)
 }
 
 type userReq struct {
-	Username       string `json:"username"`
-	Nama           string `json:"nama"`
-	Role           string `json:"role"`
-	Password       string `json:"password"`
-	IsActive       *bool  `json:"is_active"`
-	TelegramUserID *int64 `json:"telegram_user_id"`
+	Username       string  `json:"username"`
+	Nama           string  `json:"nama"`
+	Role           string  `json:"role"`
+	Password       string  `json:"password"`
+	IsActive       *bool   `json:"is_active"`
+	WhatsappNumber *string `json:"whatsapp_number"`
+}
+
+// normWA mengubah input admin ke bentuk kanonik. Kosong → NULL (guru tanpa bot).
+func normWA(in *string) (*string, error) {
+	if in == nil || strings.TrimSpace(*in) == "" {
+		return nil, nil
+	}
+	v, err := waid.Normalize(*in)
+	if err != nil {
+		return nil, err
+	}
+	return &v, nil
 }
 
 func validRole(r string) bool {
@@ -55,14 +69,19 @@ func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, http.StatusBadRequest, "BAD_REQUEST", "Username, nama, password, dan role (admin/guru/kepala) wajib")
 		return
 	}
+	wa, waErr := normWA(req.WhatsappNumber)
+	if waErr != nil {
+		httpx.Error(w, http.StatusBadRequest, "BAD_REQUEST", "Format nomor WhatsApp tidak valid")
+		return
+	}
 	hash, err := auth.HashPassword(req.Password)
 	if err != nil {
 		httpx.Error(w, http.StatusInternalServerError, "HASH_ERROR", "Gagal memproses password")
 		return
 	}
 	res, err := h.DB.Exec(
-		`INSERT INTO users (username, password_hash, nama, role, telegram_user_id) VALUES (?, ?, ?, ?, ?)`,
-		req.Username, hash, req.Nama, req.Role, req.TelegramUserID)
+		`INSERT INTO users (username, password_hash, nama, role, whatsapp_number) VALUES (?, ?, ?, ?, ?)`,
+		req.Username, hash, req.Nama, req.Role, wa)
 	if err != nil {
 		dbErr(w, err)
 		return
@@ -86,8 +105,13 @@ func (h *Handler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	if req.IsActive != nil {
 		active = *req.IsActive
 	}
-	if _, err := h.DB.Exec(`UPDATE users SET nama = ?, role = ?, is_active = ?, telegram_user_id = ? WHERE id = ?`,
-		req.Nama, req.Role, active, req.TelegramUserID, id); err != nil {
+	wa, waErr := normWA(req.WhatsappNumber)
+	if waErr != nil {
+		httpx.Error(w, http.StatusBadRequest, "BAD_REQUEST", "Format nomor WhatsApp tidak valid")
+		return
+	}
+	if _, err := h.DB.Exec(`UPDATE users SET nama = ?, role = ?, is_active = ?, whatsapp_number = ? WHERE id = ?`,
+		req.Nama, req.Role, active, wa, id); err != nil {
 		dbErr(w, err)
 		return
 	}
