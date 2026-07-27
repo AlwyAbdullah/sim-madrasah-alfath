@@ -91,6 +91,10 @@ type botLoginReq struct {
 }
 
 // POST /auth/bot-login — dipakai n8n: tukar secret+nomor WhatsApp → JWT guru (di body).
+// PENTING: n8n harus meneruskan nilai "from" mentah dari WAHA apa adanya (mis.
+// "628...@c.us" atau "628...:12@c.us") — jangan menormalkan di sisi n8n. waid.Normalize
+// di bawah ini adalah SATU-SATUNYA tempat normalisasi nomor WhatsApp terjadi; menduplikasi
+// logika ini di n8n berisiko keduanya menyimpang (persis bug yang pernah ditemukan di sini).
 func (h *Handler) BotLogin(w http.ResponseWriter, r *http.Request) {
 	var req botLoginReq
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.WhatsappNumber == "" {

@@ -33,6 +33,8 @@ func TestNormalizeInvalid(t *testing.T) {
 		"62812",                     // terlalu pendek
 		"120363123456789012@g.us",   // JID grup, bukan nomor
 		"12345678901234567890",      // terlalu panjang
+		"+62 0812-3137-2105",        // salah ketik: kode negara + trunk "0" dobel
+		"021-5551234",               // nomor telepon rumah (landline), bukan seluler
 	}
 	for _, in := range cases {
 		got, err := Normalize(in)

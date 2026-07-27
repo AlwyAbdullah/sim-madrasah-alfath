@@ -60,6 +60,13 @@ func Normalize(input string) (string, error) {
 		return "", ErrInvalid
 	}
 
+	// Semua nomor seluler Indonesia yang valid berbentuk "628...". Ini menutup
+	// kasus salah ketik kode negara ganda (mis. "+62 0812-..." -> "620812...")
+	// dan JID lain (grup dsb.) yang kebetulan berawalan digit yang sama.
+	if !strings.HasPrefix(s, "628") {
+		return "", ErrInvalid
+	}
+
 	if len(s) < 10 || len(s) > 15 {
 		return "", ErrInvalid
 	}
