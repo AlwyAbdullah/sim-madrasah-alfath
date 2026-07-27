@@ -26,9 +26,24 @@ func Normalize(input string) (string, error) {
 		return "", ErrInvalid
 	}
 
-	// Buang suffix JID: "@c.us", "@s.whatsapp.net", "@g.us".
-	if i := strings.IndexByte(s, '@'); i >= 0 {
-		s = s[:i]
+	// Buang suffix JID: "@c.us", "@s.whatsapp.net", "@g.us", dan device suffix ":12@c.us".
+	atIdx := strings.IndexByte(s, '@')
+	colonIdx := strings.IndexByte(s, ':')
+	var idx int
+	if atIdx >= 0 && colonIdx >= 0 {
+		idx = atIdx
+		if colonIdx < atIdx {
+			idx = colonIdx
+		}
+	} else if atIdx >= 0 {
+		idx = atIdx
+	} else if colonIdx >= 0 {
+		idx = colonIdx
+	} else {
+		idx = -1
+	}
+	if idx >= 0 {
+		s = s[:idx]
 	}
 
 	s = nonDigit.ReplaceAllString(s, "")
