@@ -11,6 +11,7 @@ import (
 	"sim-madrasah/backend/internal/httpx"
 	"sim-madrasah/backend/internal/middleware"
 	"sim-madrasah/backend/internal/models"
+	"sim-madrasah/backend/internal/waid"
 )
 
 type loginReq struct {
@@ -86,19 +87,25 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 
 type botLoginReq struct {
 	BotSecret      string `json:"bot_secret"`
-	TelegramUserID int64  `json:"telegram_user_id"`
+	WhatsappNumber string `json:"whatsapp_number"`
 }
 
-// POST /auth/bot-login — dipakai n8n: tukar secret+telegram_id → JWT guru (di body).
+// POST /auth/bot-login — dipakai n8n: tukar secret+nomor WhatsApp → JWT guru (di body).
 func (h *Handler) BotLogin(w http.ResponseWriter, r *http.Request) {
 	var req botLoginReq
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.TelegramUserID == 0 {
-		httpx.Error(w, http.StatusBadRequest, "BAD_REQUEST", "bot_secret dan telegram_user_id wajib")
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.WhatsappNumber == "" {
+		httpx.Error(w, http.StatusBadRequest, "BAD_REQUEST", "bot_secret dan whatsapp_number wajib")
 		return
 	}
 	secret := h.Cfg.BotSharedSecret
 	if secret == "" || subtle.ConstantTimeCompare([]byte(req.BotSecret), []byte(secret)) != 1 {
 		httpx.Error(w, http.StatusUnauthorized, "BOT_UNAUTHORIZED", "Secret bot tidak valid")
+		return
+	}
+
+	wa, err := waid.Normalize(req.WhatsappNumber)
+	if err != nil {
+		httpx.Error(w, http.StatusBadRequest, "BAD_REQUEST", "Format nomor WhatsApp tidak valid")
 		return
 	}
 
@@ -108,12 +115,12 @@ func (h *Handler) BotLogin(w http.ResponseWriter, r *http.Request) {
 		nama, role string
 		isActive   bool
 	)
-	err := h.DB.QueryRow(
-		`SELECT id, username, nama, role, is_active FROM users WHERE telegram_user_id = ?`,
-		req.TelegramUserID,
+	err = h.DB.QueryRow(
+		`SELECT id, username, nama, role, is_active FROM users WHERE whatsapp_number = ?`,
+		wa,
 	).Scan(&id, &username, &nama, &role, &isActive)
 	if err == sql.ErrNoRows {
-		httpx.Error(w, http.StatusForbidden, "NOT_REGISTERED", "Telegram ID belum terdaftar")
+		httpx.Error(w, http.StatusForbidden, "NOT_REGISTERED", "Nomor WhatsApp belum terdaftar")
 		return
 	}
 	if err != nil {
