@@ -192,6 +192,11 @@ func (h *Handler) SaveTugasBatch(w http.ResponseWriter, r *http.Request) {
 			httpx.Error(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 			return
 		}
+		// 5. catat kelas santri untuk periode ini (riwayat kelas per periode)
+		if err := enrollSantriTx(tx, it.SantriID, req.KelasID, req.PeriodeID); err != nil {
+			httpx.Error(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+			return
+		}
 		saved++
 	}
 	if err := tx.Commit(); err != nil {

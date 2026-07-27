@@ -54,8 +54,9 @@ export default function AbsensiPage() {
   }
 
   async function simpan() {
-    const belum = items.filter((i) => !i.status);
-    if (belum.length > 0) { setMsg(`${belum.length} santri belum ditandai.`); return; }
+    // Tidak wajib semua terisi — simpan hanya santri yang sudah ditandai, sisanya dilewati.
+    const terisi = items.filter((i) => i.status);
+    if (terisi.length === 0) { setMsg("Belum ada santri yang ditandai."); return; }
     setSaving(true);
     setMsg("");
     try {
@@ -64,14 +65,15 @@ export default function AbsensiPage() {
         body: {
           kelas_id: Number(kelasId),
           tanggal,
-          items: items.map((i) => ({
+          items: terisi.map((i) => ({
             santri_id: i.santri_id,
             status: i.status,
             keterangan: i.keterangan || null,
           })),
         },
       });
-      setMsg(`Tersimpan: ${d.saved} santri.`);
+      const dilewati = items.length - terisi.length;
+      setMsg(`Tersimpan: ${d.saved} santri.` + (dilewati > 0 ? ` (${dilewati} belum ditandai — dilewati)` : ""));
     } catch (e: any) {
       setMsg(e.message);
     } finally {

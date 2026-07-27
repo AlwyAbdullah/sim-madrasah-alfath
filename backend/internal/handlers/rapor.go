@@ -31,8 +31,22 @@ func (h *Handler) RaporData(w http.ResponseWriter, r *http.Request) {
 
 	// periode
 	var pNama, pTahun, pSemester string
-	_ = h.DB.QueryRow(`SELECT nama, tahun_ajaran, semester FROM periode WHERE id = ?`, periodeID).
-		Scan(&pNama, &pTahun, &pSemester)
+	var pActive bool
+	_ = h.DB.QueryRow(`SELECT nama, tahun_ajaran, semester, is_active FROM periode WHERE id = ?`, periodeID).
+		Scan(&pNama, &pTahun, &pSemester, &pActive)
+
+	// Kelas efektif untuk periode ini: bila periode LAMA & ada catatan riwayat kelas,
+	// pakai kelas saat periode itu (bukan kelas santri sekarang) agar rapor historis akurat.
+	if !pActive {
+		var hKelasID int64
+		var hKelasNama string
+		if e := h.DB.QueryRow(`
+			SELECT sk.kelas_id, k.nama FROM santri_kelas sk JOIN kelas k ON k.id = sk.kelas_id
+			WHERE sk.santri_id = ? AND sk.periode_id = ?`, santriID, periodeID).Scan(&hKelasID, &hKelasNama); e == nil {
+			kelasID = hKelasID
+			kelasNama = hKelasNama
+		}
+	}
 
 	// leger kelas (untuk rata kelas per mapel + peringkat santri)
 	mapels, rows, err := h.buildLeger(strconv.FormatInt(kelasID, 10), periodeID)

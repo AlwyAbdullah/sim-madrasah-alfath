@@ -18,8 +18,14 @@ const ADMIN_NAV = [
   { href: "/spp", label: "SPP", icon: "💳" },
 ];
 
+const KEPEG_NAV = [
+  { href: "/absensi-guru", label: "Absensi Guru", icon: "🧑‍🏫" },
+];
+
 const MASTER_NAV = [
   { href: "/master/santri", label: "Santri", icon: "🧑‍🎓" },
+  { href: "/naik-kelas", label: "Naik Kelas", icon: "⬆️" },
+  { href: "/master/guru", label: "Guru", icon: "👨‍🏫" },
   { href: "/master/kelas", label: "Kelas", icon: "🏫" },
   { href: "/master/pelajaran-kelas", label: "Pelajaran per Kelas", icon: "🔗" },
   { href: "/master/mapel", label: "Mata Pelajaran", icon: "📚" },
@@ -67,6 +73,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             <>
               <div className="nav-section">Keuangan</div>
               {ADMIN_NAV.map((n) => <NavLink key={n.href} {...n} pathname={pathname} />)}
+              <div className="nav-section">Kepegawaian</div>
+              {KEPEG_NAV.map((n) => <NavLink key={n.href} {...n} pathname={pathname} />)}
               <div className="nav-section">Master Data</div>
               {MASTER_NAV.map((n) => <NavLink key={n.href} {...n} pathname={pathname} />)}
             </>

@@ -110,6 +110,7 @@ func main() {
 				r.Put("/santri/{id}", h.UpdateSantri)
 				r.Delete("/santri/{id}", h.DeleteSantri)
 				r.Post("/santri/import", h.ImportSantri)
+				r.Post("/santri/naik-kelas", h.NaikKelas)
 
 				r.Post("/mata-pelajaran", h.CreateMapel)
 				r.Put("/mata-pelajaran/{id}", h.UpdateMapel)
@@ -127,6 +128,17 @@ func main() {
 				r.Post("/users", h.CreateUser)
 				r.Put("/users/{id}", h.UpdateUser)
 				r.Delete("/users/{id}", h.DeleteUser)
+
+				r.Get("/guru", h.ListGuru)
+				r.Post("/guru", h.CreateGuru)
+				r.Put("/guru/{id}", h.UpdateGuru)
+				r.Delete("/guru/{id}", h.DeleteGuru)
+
+				// Absensi guru + rekap (bulan/semester/tahun)
+				r.Get("/absensi-guru", h.GetAbsensiGuru)
+				r.Post("/absensi-guru/batch", h.SaveAbsensiGuru)
+				r.Get("/absensi-guru/rekap", h.RekapAbsensiGuru)
+				r.Get("/absensi-guru/export", h.ExportAbsensiGuru)
 			})
 		})
 	})

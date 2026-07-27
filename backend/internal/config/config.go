@@ -47,7 +47,9 @@ func Load() *Config {
 }
 
 func (c *Config) DSN() string {
-	return fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true&loc=Local&charset=utf8mb4&allowNativePasswords=false",
+	// allowNativePasswords=true: VPS MySQL pakai mysql_native_password (perlu true).
+	// Tetap kompatibel dgn MySQL 8.4 (driver pakai caching_sha2_password bila server memintanya).
+	return fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true&loc=Local&charset=utf8mb4&allowNativePasswords=true",
 		c.DBUser, c.DBPassword, c.DBHost, c.DBPort, c.DBName)
 }
 

@@ -63,21 +63,17 @@ func (h *Handler) buildLeger(kelasID, periodeID string) ([]legerMapel, []legerRo
 		frows.Close()
 	}
 
-	// santri kelas
-	srows, err := h.DB.Query(`SELECT id, COALESCE(nis,''), nama FROM santri WHERE kelas_id = ? AND is_active = 1 ORDER BY nama`, kelasID)
+	// santri untuk kelas+periode (enrollment-aware: periode lama pakai kelas saat itu).
+	roster, err := h.rosterSantri(kelasID, periodeID)
 	if err != nil {
 		return nil, nil, err
 	}
 	rows := []legerRow{}
 	idx := map[int64]int{}
-	for srows.Next() {
-		var r legerRow
-		_ = srows.Scan(&r.SantriID, &r.NIS, &r.Nama)
-		r.Nilai = map[int64]*float64{}
-		idx[r.SantriID] = len(rows)
-		rows = append(rows, r)
+	for _, s := range roster {
+		idx[s.ID] = len(rows)
+		rows = append(rows, legerRow{SantriID: s.ID, NIS: s.NIS, Nama: s.Nama, Nilai: map[int64]*float64{}})
 	}
-	srows.Close()
 
 	// hanya hitung mapel yang dipetakan ke kelas (kolom yang tampil di leger/rapor).
 	// nilai mapel "yatim" (tak dipetakan, mis. sisa pemetaan lama) diabaikan agar
@@ -88,11 +84,10 @@ func (h *Handler) buildLeger(kelasID, periodeID string) ([]legerMapel, []legerRo
 		valid[m.ID] = true
 	}
 
-	// nilai akhir per santri per mapel
+	// nilai akhir periode ini; difilter ke roster (idx) & mapel dipetakan (valid).
 	nrows, err := h.DB.Query(`
-		SELECT n.santri_id, n.mata_pelajaran_id, n.nilai_akhir
-		FROM nilai n JOIN santri s ON s.id = n.santri_id
-		WHERE s.kelas_id = ? AND n.periode_id = ?`, kelasID, periodeID)
+		SELECT santri_id, mata_pelajaran_id, nilai_akhir
+		FROM nilai WHERE periode_id = ?`, periodeID)
 	if err != nil {
 		return nil, nil, err
 	}

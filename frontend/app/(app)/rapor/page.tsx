@@ -27,10 +27,11 @@ function naikLabel(kelas: string): string {
 }
 
 function density(n: number) {
-  if (n <= 4) return { fz: 13, pad: "5px 9px", kop: 460, title: 15, ar: 12, rowH: 28, gap: 6, sigH: 34 };
-  if (n <= 7) return { fz: 12, pad: "4px 7px", kop: 420, title: 13.5, ar: 11, rowH: 22, gap: 5, sigH: 30 };
-  if (n <= 10) return { fz: 11, pad: "3px 6px", kop: 380, title: 12.5, ar: 10, rowH: 19, gap: 4, sigH: 26 };
-  return { fz: 10, pad: "2px 5px", kop: 340, title: 11.5, ar: 9, rowH: 16, gap: 3, sigH: 22 };
+  // kop = lebar maksimum gambar KOP (px). Tinggi otomatis (rasio asli 3.31:1) → tidak gepeng/lonjong.
+  if (n <= 4) return { fz: 13, pad: "5px 9px", kop: 600, title: 15, ar: 12, rowH: 28, gap: 6, sigH: 34 };
+  if (n <= 7) return { fz: 12, pad: "4px 7px", kop: 540, title: 13.5, ar: 11, rowH: 22, gap: 5, sigH: 30 };
+  if (n <= 10) return { fz: 11, pad: "3px 6px", kop: 480, title: 12.5, ar: 10, rowH: 19, gap: 4, sigH: 26 };
+  return { fz: 10, pad: "2px 5px", kop: 430, title: 11.5, ar: 9, rowH: 16, gap: 3, sigH: 22 };
 }
 
 // angka < 60 → merah
