@@ -24,4 +24,4 @@ tar czf - --exclude=node_modules --exclude=.next --exclude=.env.local . \
   | ssh -i "$KEY" "$HOST" "tar xzf - -C $REMOTE/frontend"
 ssh -i "$KEY" "$HOST" "cd $REMOTE/frontend && npm ci && npm run build && sudo systemctl restart sim-madrasah-frontend && systemctl is-active sim-madrasah-frontend"
 
-echo ">> Selesai. http://103.175.219.47"
+echo ">> Selesai. https://madrasah-alfath-malang.web.id"

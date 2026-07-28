@@ -1,11 +1,12 @@
 > ## ✅ PRODUKSI AKTIF
-> - **URL:** http://103.175.219.47  · Login awal: `admin` / `admin123` (**WAJIB ganti**).
+> - **URL:** https://madrasah-alfath-malang.web.id (www juga aktif). IP lama `103.175.219.47` otomatis redirect ke domain.
 > - **Server:** Ubuntu 22.04, user `deploy`, kode di `/home/deploy/sim-madrasah`.
 > - **Backend** Go `:8090` → service `sim-madrasah-backend`. **Frontend** Next `:3000` → `sim-madrasah-frontend`. DB MySQL `sim_madrasah` (user `sim_user`).
-> - **Nginx** `sites-available/sim-madrasah` (server_name = IP). Tidak mengganggu situs `sayalulus` yang ada.
+> - **Nginx** `sites-available/sim-madrasah` (server_name = domain + www + IP). Tidak mengganggu situs `sayalulus` yang ada.
 > - **Update rilis berikutnya:** jalankan `bash deploy/redeploy.sh` dari mesin lokal (Git Bash).
 > - **Log:** `journalctl -u sim-madrasah-backend -e` / `... -frontend -e`.
-> - **HTTPS (opsional):** arahkan hostname (mis. `sim.103-175-219-47.sslip.io`) → set `server_name` di nginx → `sudo certbot --nginx` → set `COOKIE_SECURE=true` di `.env`, restart backend.
+> - **HTTPS:** ✅ aktif (Let's Encrypt, auto-renew via `certbot.timer`; kedaluwarsa 26 Okt 2026). `COOKIE_SECURE=true` & `CORS_ORIGIN=https://madrasah-alfath-malang.web.id` di `.env`.
+>   Perpanjangan otomatis; cek manual: `sudo certbot renew --dry-run`.
 >
 > Bagian di bawah = panduan generik/dari nol (referensi).
 
