@@ -98,6 +98,7 @@ func main() {
 				// SPP (tidak boleh dilihat guru)
 				r.Get("/spp", h.GetSPP)
 				r.Post("/spp/toggle", h.ToggleSPP)
+				r.Post("/spp/batch", h.SaveSPPBatch)
 				r.Get("/spp/export", h.ExportSPP)
 
 				// Master CRUD

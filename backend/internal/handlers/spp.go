@@ -134,6 +134,77 @@ func (h *Handler) ToggleSPP(w http.ResponseWriter, r *http.Request) {
 	httpx.JSON(w, http.StatusOK, map[string]interface{}{"santri_id": req.SantriID, "bulan": req.Bulan, "lunas": req.Lunas})
 }
 
+type sppBatchReq struct {
+	Tahun int `json:"tahun"` // TA start year
+	Items []struct {
+		SantriID int64 `json:"santri_id"`
+		Bulan    int   `json:"bulan"` // bulan kalender 1..12
+		Lunas    bool  `json:"lunas"`
+	} `json:"items"`
+}
+
+// POST /spp/batch — set banyak sel SPP sekaligus (satu transaksi).
+// Dipakai untuk aksi massal: sapu/drag, satu kolom bulan, satu baris santri, atau semua.
+func (h *Handler) SaveSPPBatch(w http.ResponseWriter, r *http.Request) {
+	var req sppBatchReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		httpx.Error(w, http.StatusBadRequest, "BAD_REQUEST", "Body tidak valid")
+		return
+	}
+	if req.Tahun == 0 || len(req.Items) == 0 {
+		httpx.Error(w, http.StatusBadRequest, "BAD_REQUEST", "tahun dan items wajib")
+		return
+	}
+	for _, it := range req.Items {
+		if it.SantriID == 0 || it.Bulan < 1 || it.Bulan > 12 {
+			httpx.Error(w, http.StatusBadRequest, "BAD_REQUEST", "santri_id dan bulan (1-12) wajib")
+			return
+		}
+	}
+
+	claims := middleware.ClaimsFrom(r)
+	var userID interface{}
+	if claims != nil {
+		userID = claims.UserID
+	}
+	hariIni := time.Now().Format("2006-01-02")
+
+	tx, err := h.DB.Begin()
+	if err != nil {
+		httpx.Error(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+		return
+	}
+	defer tx.Rollback()
+
+	stmt, err := tx.Prepare(`
+		INSERT INTO spp (santri_id, tahun, bulan, lunas, tanggal_bayar, created_by)
+		VALUES (?, ?, ?, ?, ?, ?)
+		ON DUPLICATE KEY UPDATE lunas = VALUES(lunas), tanggal_bayar = VALUES(tanggal_bayar)`)
+	if err != nil {
+		httpx.Error(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+		return
+	}
+	defer stmt.Close()
+
+	saved := 0
+	for _, it := range req.Items {
+		var tgl interface{}
+		if it.Lunas {
+			tgl = hariIni
+		}
+		if _, err := stmt.Exec(it.SantriID, calTahun(req.Tahun, it.Bulan), it.Bulan, it.Lunas, tgl, userID); err != nil {
+			httpx.Error(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+			return
+		}
+		saved++
+	}
+	if err := tx.Commit(); err != nil {
+		httpx.Error(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+		return
+	}
+	httpx.JSON(w, http.StatusOK, map[string]interface{}{"saved": saved})
+}
+
 // GET /spp/export?kelas_id=&tahun=
 func (h *Handler) ExportSPP(w http.ResponseWriter, r *http.Request) {
 	kelasID := r.URL.Query().Get("kelas_id")
