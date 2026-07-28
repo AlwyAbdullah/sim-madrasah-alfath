@@ -11,7 +11,7 @@ import (
 )
 
 func (h *Handler) ListKelas(w http.ResponseWriter, r *http.Request) {
-	q := `SELECT id, nama, COALESCE(tingkat,''), aktif FROM kelas`
+	q := `SELECT id, nama, COALESCE(tingkat,''), aktif, wali_id FROM kelas`
 	if r.URL.Query().Get("aktif") == "1" {
 		q += ` WHERE aktif = 1`
 	}
@@ -27,11 +27,12 @@ func (h *Handler) ListKelas(w http.ResponseWriter, r *http.Request) {
 		Nama    string `json:"nama"`
 		Tingkat string `json:"tingkat"`
 		Aktif   bool   `json:"aktif"`
+		WaliID  *int64 `json:"wali_id"`
 	}
 	out := []kelas{}
 	for rows.Next() {
 		var k kelas
-		_ = rows.Scan(&k.ID, &k.Nama, &k.Tingkat, &k.Aktif)
+		_ = rows.Scan(&k.ID, &k.Nama, &k.Tingkat, &k.Aktif, &k.WaliID)
 		out = append(out, k)
 	}
 	httpx.JSON(w, http.StatusOK, out)
