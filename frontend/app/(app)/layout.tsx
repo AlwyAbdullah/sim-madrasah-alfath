@@ -20,6 +20,7 @@ const ADMIN_NAV = [
 
 const KEPEG_NAV = [
   { href: "/absensi-guru", label: "Absensi Guru", icon: "🧑‍🏫" },
+  { href: "/notifikasi", label: "Notifikasi WA", icon: "💬" },
 ];
 
 const MASTER_NAV = [

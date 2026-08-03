@@ -49,6 +49,10 @@ func main() {
 		r.Post("/auth/logout", h.Logout)
 		r.Post("/auth/bot-login", h.BotLogin)
 
+		// Antrean notifikasi WhatsApp — diakses bot memakai X-Bot-Secret.
+		r.Get("/notifikasi/pending", h.NotifPending)
+		r.Post("/notifikasi/status", h.NotifStatus)
+
 		// Terproteksi (semua guru bisa akses semua kelas — tanpa batasan kelas ampu)
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.RequireAuth(cfg.JWTSecret))
@@ -134,6 +138,11 @@ func main() {
 				r.Post("/guru", h.CreateGuru)
 				r.Put("/guru/{id}", h.UpdateGuru)
 				r.Delete("/guru/{id}", h.DeleteGuru)
+
+				// Notifikasi WhatsApp (pantau & kelola antrean)
+				r.Get("/notifikasi", h.ListNotifikasi)
+				r.Post("/notifikasi/{id}/ulang", h.UlangNotifikasi)
+				r.Post("/notifikasi/{id}/batal", h.BatalNotifikasi)
 
 				// Absensi guru + rekap (bulan/semester/tahun)
 				r.Get("/absensi-guru", h.GetAbsensiGuru)
