@@ -7,11 +7,14 @@
 > - **Log:** `journalctl -u sim-madrasah-backend -e` / `... -frontend -e`.
 > - **HTTPS:** ✅ aktif (Let's Encrypt, auto-renew via `certbot.timer`; kedaluwarsa 26 Okt 2026). `COOKIE_SECURE=true` & `CORS_ORIGIN=https://madrasah-alfath-malang.web.id` di `.env`.
 >   Perpanjangan otomatis; cek manual: `sudo certbot renew --dry-run`.
-> - **WAHA (WhatsApp bot notifikasi ortu):** ✅ aktif via Docker di VPS ini sendiri, `devlikeapro/waha:noweb`
+> - **WAHA (WhatsApp bot notifikasi ortu):** terpasang via Docker di VPS ini sendiri, `devlikeapro/waha:noweb`
 >   (compose di `/home/deploy/waha/`, kredensial di `/home/deploy/waha/.env`, perm 600).
 >   Bind **hanya** ke `127.0.0.1:3001` (tidak publik) — backend memanggil langsung via worker bawaan
->   (`internal/notifworker`, aktif otomatis kalau `WAHA_URL` terisi di `.env` backend). RAM dibatasi 400 MB.
->   Sesi WhatsApp: `default`. Detail & alternatif (n8n) di `docs/BOT-NOTIFIKASI-WA.md`.
+>   (`internal/notifworker`). RAM dibatasi 400 MB. Sesi WhatsApp sudah ter-pairing: `default`.
+>   ⏸️ **Saat ini DIMATIKAN** (container `docker compose stop` + saklar nonaktif dari halaman
+>   **Notifikasi WA**) — sesi tetap tersimpan, tidak perlu scan ulang. Nyalakan lagi:
+>   `cd /home/deploy/waha && docker compose start` lalu toggle "Aktifkan" di halaman **Notifikasi WA**.
+>   Detail & alternatif (n8n) di `docs/BOT-NOTIFIKASI-WA.md`.
 >
 > Bagian di bawah = panduan generik/dari nol (referensi).
 
