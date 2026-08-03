@@ -13,6 +13,7 @@ import (
 	"sim-madrasah/backend/internal/db"
 	"sim-madrasah/backend/internal/handlers"
 	"sim-madrasah/backend/internal/middleware"
+	"sim-madrasah/backend/internal/notifworker"
 )
 
 func main() {
@@ -25,6 +26,9 @@ func main() {
 	defer conn.Close()
 
 	h := handlers.New(conn, cfg)
+
+	// Worker pengirim notifikasi WhatsApp (nonaktif otomatis bila WAHA_URL kosong).
+	go notifworker.Run(conn, cfg)
 
 	r := chi.NewRouter()
 	r.Use(chimw.Logger)

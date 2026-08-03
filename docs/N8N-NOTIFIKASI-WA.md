@@ -1,5 +1,11 @@
 # Panduan n8n — Mengirim Notifikasi WA ke Orang Tua
 
+> 💡 **Tidak wajib pakai n8n.** Backend punya **worker bawaan** yang bisa
+> mengirim langsung ke WAHA tanpa n8n — cukup isi `WAHA_URL` dkk di `.env`.
+> Lihat bagian "A. Worker bawaan" di `BOT-NOTIFIKASI-WA.md`. Pakai panduan n8n
+> ini hanya bila Anda memang ingin pengiriman dikelola lewat n8n (mis. supaya
+> mudah dipantau visual, atau digabung dengan automasi lain).
+
 Backend hanya **mengantrikan** pesan. Workflow n8n ini yang mengambil antrean,
 mengirim lewat **WAHA**, lalu melapor balik. Tidak perlu mengubah kode bot yang ada.
 
