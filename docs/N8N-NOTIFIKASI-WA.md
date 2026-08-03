@@ -45,8 +45,8 @@ Hasil: `{ "items": [ { id, tujuan, pesan, jenis } ] }`
 
 Kalau antrean kosong, workflow berhenti di sini dengan sendirinya.
 
-### 4. Proses satu per satu — Loop Over Items
-- Tipe: **Loop Over Items** (*Split In Batches*)
+### 4. Proses satu per satu — Loop Antrean
+- Tipe: **Loop Over Items** (*Split In Batches*) — beri nama node `Loop Antrean`
 - Batch Size: **1**
 
 ### 5. Kirim via WAHA — HTTP Request
@@ -76,7 +76,7 @@ node ini, supaya satu nomor yang gagal tidak menghentikan sisa antrean.
 - Body (JSON):
 
 ```json
-{ "id": "={{ $('Loop Over Items').item.json.id }}", "sukses": true }
+{ "id": "={{ $('Loop Antrean').item.json.id }}", "sukses": true }
 ```
 
 ### 7. Lapor gagal — HTTP Request (dari jalur error node 5)
@@ -84,7 +84,7 @@ Body:
 
 ```json
 {
-  "id": "={{ $('Loop Over Items').item.json.id }}",
+  "id": "={{ $('Loop Antrean').item.json.id }}",
   "sukses": false,
   "catatan": "={{ $json.error || 'gagal kirim' }}"
 }
@@ -93,82 +93,65 @@ Body:
 ### 8. Jeda — Wait
 - Tipe: **Wait**
 - Amount: **8** detik (rentang aman 5–15 detik)
-- Sambungkan kembali ke **Loop Over Items**
+- Sambungkan kembali ke **Loop Antrean**
 
 ---
 
-## Kerangka JSON (untuk diimpor)
+## Cara cepat: impor file JSON
 
-Ganti `GANTI_WAHA_URL`, lalu isi credential setelah impor. Struktur node bisa
-sedikit berbeda antar versi n8n — sesuaikan bila perlu.
+File siap impor: **[`n8n-notifikasi-wa.json`](n8n-notifikasi-wa.json)**
 
-```json
-{
-  "name": "Notifikasi WA Madrasah Al Fath",
-  "nodes": [
-    { "name": "Setiap 5 Menit", "type": "n8n-nodes-base.scheduleTrigger", "typeVersion": 1.2,
-      "position": [0, 0],
-      "parameters": { "rule": { "interval": [ { "field": "minutes", "minutesInterval": 5 } ] } } },
+1. Di n8n: **Workflows → ⋯ (titik tiga) → Import from File** lalu pilih file tersebut.
+2. Ganti 3 placeholder ini (Ctrl+F di tiap node):
 
-    { "name": "Ambil Antrean", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2,
-      "position": [220, 0],
-      "parameters": {
-        "url": "https://madrasah-alfath-malang.web.id/api/v1/notifikasi/pending?limit=20",
-        "sendHeaders": true,
-        "headerParameters": { "parameters": [ { "name": "X-Bot-Secret", "value": "GANTI_SECRET" } ] }
-      } },
+   | Placeholder | Isi dengan |
+   |---|---|
+   | `__BOT_SECRET__` | nilai `BOT_SHARED_SECRET` (2 node: *Lapor Sukses* & *Lapor Gagal*, dan *Ambil Antrean*) |
+   | `__WAHA_URL__` | alamat WAHA Anda, mis. `http://waha:3000` (tanpa garis miring di akhir) |
+   | `__WAHA_API_KEY__` | API key WAHA — **hapus baris header ini** bila WAHA Anda tanpa API key |
 
-    { "name": "Pecah Items", "type": "n8n-nodes-base.splitOut", "typeVersion": 1,
-      "position": [440, 0], "parameters": { "fieldToSplitOut": "items" } },
+3. Sesuaikan `session` di node *Kirim WAHA* bila bukan `default`.
+4. **Execute Workflow** untuk uji manual, lalu **Active** bila sudah benar.
 
-    { "name": "Loop Over Items", "type": "n8n-nodes-base.splitInBatches", "typeVersion": 3,
-      "position": [660, 0], "parameters": { "batchSize": 1 } },
+> ⚠️ Setelah placeholder diisi, file berisi rahasia — **jangan** di-commit ke git
+> atau dibagikan. Lebih aman lagi: simpan sebagai **Credential** *Header Auth* di n8n.
 
-    { "name": "Kirim WAHA", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2,
-      "position": [880, 0], "onError": "continueErrorOutput",
-      "parameters": {
-        "method": "POST", "url": "GANTI_WAHA_URL/api/sendText",
-        "sendBody": true, "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ session: 'default', chatId: $json.tujuan + '@c.us', text: $json.pesan }) }}"
-      } },
+Struktur node bisa sedikit berbeda antar versi n8n — sesuaikan bila perlu.
 
-    { "name": "Lapor Sukses", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2,
-      "position": [1100, -80],
-      "parameters": {
-        "method": "POST", "url": "https://madrasah-alfath-malang.web.id/api/v1/notifikasi/status",
-        "sendHeaders": true,
-        "headerParameters": { "parameters": [ { "name": "X-Bot-Secret", "value": "GANTI_SECRET" } ] },
-        "sendBody": true, "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ id: $('Loop Over Items').item.json.id, sukses: true }) }}"
-      } },
+### Alur workflow
 
-    { "name": "Lapor Gagal", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2,
-      "position": [1100, 100],
-      "parameters": {
-        "method": "POST", "url": "https://madrasah-alfath-malang.web.id/api/v1/notifikasi/status",
-        "sendHeaders": true,
-        "headerParameters": { "parameters": [ { "name": "X-Bot-Secret", "value": "GANTI_SECRET" } ] },
-        "sendBody": true, "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ id: $('Loop Over Items').item.json.id, sukses: false, catatan: String($json.error || 'gagal kirim').slice(0,200) }) }}"
-      } },
-
-    { "name": "Jeda 8 Detik", "type": "n8n-nodes-base.wait", "typeVersion": 1.1,
-      "position": [1320, 0], "webhookId": "jeda-notif",
-      "parameters": { "amount": 8, "unit": "seconds" } }
-  ],
-  "connections": {
-    "Setiap 5 Menit":   { "main": [ [ { "node": "Ambil Antrean", "type": "main", "index": 0 } ] ] },
-    "Ambil Antrean":    { "main": [ [ { "node": "Pecah Items", "type": "main", "index": 0 } ] ] },
-    "Pecah Items":      { "main": [ [ { "node": "Loop Over Items", "type": "main", "index": 0 } ] ] },
-    "Loop Over Items":  { "main": [ [], [ { "node": "Kirim WAHA", "type": "main", "index": 0 } ] ] },
-    "Kirim WAHA":       { "main": [ [ { "node": "Lapor Sukses", "type": "main", "index": 0 } ],
-                                    [ { "node": "Lapor Gagal",  "type": "main", "index": 0 } ] ] },
-    "Lapor Sukses":     { "main": [ [ { "node": "Jeda 8 Detik", "type": "main", "index": 0 } ] ] },
-    "Lapor Gagal":      { "main": [ [ { "node": "Jeda 8 Detik", "type": "main", "index": 0 } ] ] },
-    "Jeda 8 Detik":     { "main": [ [ { "node": "Loop Over Items", "type": "main", "index": 0 } ] ] }
-  }
-}
 ```
+        ┌──────────────────┐
+        │ Setiap 5 Menit   │  (Schedule Trigger)
+        └────────┬─────────┘
+                 ▼
+        ┌──────────────────┐
+        │ Ambil Antrean    │  GET /notifikasi/pending?limit=20
+        └────────┬─────────┘  header: X-Bot-Secret
+                 ▼
+        ┌──────────────────┐
+        │ Pecah Items      │  Split Out: field "items"
+        └────────┬─────────┘
+                 ▼
+        ┌──────────────────┐
+   ┌───▶│ Loop Antrean     │  Split In Batches (1 per putaran)
+   │    └────────┬─────────┘
+   │             ▼ (output "loop")
+   │    ┌──────────────────┐
+   │    │ Kirim WAHA       │  POST {WAHA}/api/sendText
+   │    └───┬──────────┬───┘  onError: continue (error output)
+   │  sukses▼          ▼gagal
+   │  ┌───────────┐ ┌───────────┐
+   │  │Lapor Sukses│ │Lapor Gagal│  POST /notifikasi/status
+   │  └─────┬─────┘ └─────┬─────┘
+   │        └──────┬──────┘
+   │               ▼
+   │      ┌──────────────────┐
+   └──────┤ Jeda 8 Detik     │  Wait (anti-spam)
+          └──────────────────┘
+```
+
+Isi lengkap tiap node ada di file **[`n8n-notifikasi-wa.json`](n8n-notifikasi-wa.json)**.
 
 ---
 
