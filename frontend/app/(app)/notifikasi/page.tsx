@@ -31,6 +31,9 @@ export default function NotifikasiPage() {
   const [msg, setMsg] = useState("");
   const [lihat, setLihat] = useState<Item | null>(null);
 
+  const [aktif, setAktif] = useState<boolean | null>(null); // null = belum termuat
+  const [mengubah, setMengubah] = useState(false);
+
   const load = useCallback(async () => {
     const d = await api(`/notifikasi${status ? `?status=${status}` : ""}`);
     setItems(d.items || []);
@@ -38,6 +41,24 @@ export default function NotifikasiPage() {
   }, [status]);
 
   useEffect(() => { load().catch((e) => setMsg(e.message)); }, [load]);
+  useEffect(() => {
+    api("/notifikasi/pengaturan").then((d) => setAktif(!!d.aktif)).catch(() => {});
+  }, []);
+
+  async function toggleAktif() {
+    const nilaiBaru = !aktif;
+    if (!nilaiBaru && !confirm("Matikan pengiriman WhatsApp otomatis?\n\nPesan tetap tercatat di antrean seperti biasa, hanya saja tidak akan dikirim sampai diaktifkan kembali.")) return;
+    setMengubah(true);
+    try {
+      const d = await api("/notifikasi/pengaturan", { method: "POST", body: { aktif: nilaiBaru } });
+      setAktif(!!d.aktif);
+      setMsg(d.aktif ? "Pengiriman WhatsApp diaktifkan." : "Pengiriman WhatsApp dimatikan — pesan baru tetap mengantre.");
+    } catch (e: any) {
+      setMsg(e.message);
+    } finally {
+      setMengubah(false);
+    }
+  }
 
   async function aksi(id: number, jenis: "ulang" | "batal") {
     try {
@@ -55,6 +76,28 @@ export default function NotifikasiPage() {
         lalu bot WhatsApp mengambil &amp; mengirimnya. Jika status absensi dikoreksi menjadi bukan alpha,
         pesan yang belum terkirim otomatis dibatalkan.
       </p>
+
+      <div className="card" style={{ padding: 14, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+        <div>
+          <strong>Pengiriman WhatsApp otomatis: </strong>
+          {aktif === null ? (
+            <span className="muted">memuat…</span>
+          ) : (
+            <span className={`badge ${aktif ? "hadir" : "alpha"}`}>{aktif ? "Aktif" : "Nonaktif"}</span>
+          )}
+          <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
+            Saat nonaktif, pesan alpha tetap tercatat di antrean seperti biasa — hanya tidak dikirim sampai diaktifkan lagi.
+          </div>
+        </div>
+        <button
+          className={aktif ? "btn secondary" : "btn"}
+          onClick={toggleAktif}
+          disabled={aktif === null || mengubah}
+          style={aktif ? { color: "var(--danger)" } : undefined}
+        >
+          {mengubah ? "Menyimpan…" : aktif ? "🔕 Matikan" : "🔔 Aktifkan"}
+        </button>
+      </div>
 
       <div className="row" style={{ fontSize: 13 }}>
         <span className="badge hadir">Terkirim {ringkasan.terkirim || 0}</span>

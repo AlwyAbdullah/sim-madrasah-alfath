@@ -147,6 +147,8 @@ func main() {
 				r.Get("/notifikasi", h.ListNotifikasi)
 				r.Post("/notifikasi/{id}/ulang", h.UlangNotifikasi)
 				r.Post("/notifikasi/{id}/batal", h.BatalNotifikasi)
+				r.Get("/notifikasi/pengaturan", h.GetPengaturanNotifikasi)
+				r.Post("/notifikasi/pengaturan", h.SetPengaturanNotifikasi)
 
 				// Absensi guru + rekap (bulan/semester/tahun)
 				r.Get("/absensi-guru", h.GetAbsensiGuru)

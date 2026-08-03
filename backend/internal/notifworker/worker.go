@@ -30,19 +30,46 @@ type pendingItem struct {
 // Sengaja pakai loop sleep, bukan ticker: memproses satu batch penuh dulu
 // (termasuk jeda antar pesan) sebelum menunggu giliran berikutnya, sehingga
 // tidak pernah ada dua batch berjalan bersamaan.
+//
+// Saklar aktif/nonaktif (tabel notifikasi_wa_pengaturan, diatur dari halaman
+// admin) dicek tiap putaran — bisa dimatikan/dinyalakan tanpa restart backend.
+// Saat nonaktif, pesan tetap diantrekan seperti biasa; worker cuma diam.
 func Run(db *sql.DB, cfg *config.Config) {
 	if cfg.WahaURL == "" {
 		log.Println("notifworker: WAHA_URL kosong -> worker pengirim WA tidak aktif (pakai n8n/skrip lain bila perlu)")
 		return
 	}
 	interval := time.Duration(cfg.WahaPollSeconds) * time.Second
-	log.Printf("notifworker: aktif — polling tiap %s, kirim ke %s (sesi %q)", interval, cfg.WahaURL, cfg.WahaSession)
+	log.Printf("notifworker: siap — polling tiap %s, kirim ke %s (sesi %q)", interval, cfg.WahaURL, cfg.WahaSession)
 
 	client := &http.Client{Timeout: 20 * time.Second}
+	var lastAktif *bool
 	for {
-		prosesBatch(db, cfg, client)
+		aktif := pengirimanAktif(db)
+		if lastAktif == nil || *lastAktif != aktif {
+			if aktif {
+				log.Println("notifworker: pengiriman DIAKTIFKAN (pengaturan admin)")
+			} else {
+				log.Println("notifworker: pengiriman DIJEDA (pengaturan admin) — pesan tetap mengantre, tidak dikirim sampai diaktifkan lagi")
+			}
+			lastAktif = &aktif
+		}
+		if aktif {
+			prosesBatch(db, cfg, client)
+		}
 		time.Sleep(interval)
 	}
+}
+
+// pengirimanAktif membaca saklar dari database. Bila baris/tabel belum ada
+// (mis. migrasi 014 belum jalan), dianggap aktif — sesuai perilaku sebelum
+// saklar ini ada, supaya deploy lama tidak diam-diam berhenti mengirim.
+func pengirimanAktif(db *sql.DB) bool {
+	var aktif bool
+	if err := db.QueryRow(`SELECT aktif FROM notifikasi_wa_pengaturan WHERE id = 1`).Scan(&aktif); err != nil {
+		return true
+	}
+	return aktif
 }
 
 func prosesBatch(db *sql.DB, cfg *config.Config, client *http.Client) {

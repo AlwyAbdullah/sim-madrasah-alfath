@@ -271,3 +271,33 @@ func (h *Handler) BatalNotifikasi(w http.ResponseWriter, r *http.Request) {
 	}
 	httpx.JSON(w, http.StatusOK, map[string]string{"message": "ok"})
 }
+
+// GET /notifikasi/pengaturan — status aktif/nonaktif worker pengirim WA.
+func (h *Handler) GetPengaturanNotifikasi(w http.ResponseWriter, r *http.Request) {
+	var aktif bool
+	if err := h.DB.QueryRow(`SELECT aktif FROM notifikasi_wa_pengaturan WHERE id = 1`).Scan(&aktif); err != nil {
+		aktif = true // baris belum ada (mis. sebelum migrasi 014) -> anggap aktif, sesuai perilaku lama
+	}
+	httpx.JSON(w, http.StatusOK, map[string]interface{}{"aktif": aktif})
+}
+
+type pengaturanNotifReq struct {
+	Aktif bool `json:"aktif"`
+}
+
+// POST /notifikasi/pengaturan — nyalakan/matikan pengiriman WA.
+// Saat nonaktif, pesan tetap diantrekan seperti biasa (fitur absensi tak terpengaruh);
+// worker (internal/notifworker) hanya berhenti memanggil WAHA sampai diaktifkan lagi.
+func (h *Handler) SetPengaturanNotifikasi(w http.ResponseWriter, r *http.Request) {
+	var req pengaturanNotifReq
+	if !decode(w, r, &req) {
+		return
+	}
+	if _, err := h.DB.Exec(`
+		INSERT INTO notifikasi_wa_pengaturan (id, aktif) VALUES (1, ?)
+		ON DUPLICATE KEY UPDATE aktif = VALUES(aktif)`, req.Aktif); err != nil {
+		dbErr(w, err)
+		return
+	}
+	httpx.JSON(w, http.StatusOK, map[string]interface{}{"aktif": req.Aktif})
+}
