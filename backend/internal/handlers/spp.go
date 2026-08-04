@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -33,27 +34,37 @@ func taStartSekarang(now time.Time) int {
 }
 
 type sppItem struct {
-	SantriID int64        `json:"santri_id"`
-	NIS      string       `json:"nis"`
-	Nama     string       `json:"nama"`
-	Bulan    map[int]bool `json:"bulan"` // key = bulan kalender (1..12) -> lunas
-	Lunas    int          `json:"lunas"`
+	SantriID int64          `json:"santri_id"`
+	NIS      string         `json:"nis"`
+	Nama     string         `json:"nama"`
+	KelasID  int64          `json:"kelas_id"`
+	Kelas    string         `json:"kelas"`
+	Bulan    map[int]bool   `json:"bulan"` // key = bulan kalender (1..12) -> lunas
+	Ket      map[int]string `json:"ket"`   // keterangan opsional per bulan
+	Lunas    int            `json:"lunas"`
 }
 
-// GET /spp?kelas_id=&tahun=  (tahun = tahun ajaran mulai, mis. 2025 = TA 2025/2026)
+// GET /spp?tahun=&kelas_id=  (tahun = tahun ajaran mulai, mis. 2025 = TA 2025/2026)
+// kelas_id OPSIONAL: bila kosong, seluruh santri aktif ditampilkan (diurutkan per kelas).
 func (h *Handler) GetSPP(w http.ResponseWriter, r *http.Request) {
 	kelasID := r.URL.Query().Get("kelas_id")
 	tahunStr := r.URL.Query().Get("tahun")
-	if kelasID == "" {
-		httpx.Error(w, http.StatusBadRequest, "BAD_REQUEST", "kelas_id wajib")
-		return
-	}
 	startYear := taStartSekarang(time.Now())
 	if tahunStr != "" {
 		fmt.Sscanf(tahunStr, "%d", &startYear)
 	}
 
-	srows, err := h.DB.Query(`SELECT id, COALESCE(nis,''), nama FROM santri WHERE kelas_id = ? AND is_active = 1 ORDER BY nama`, kelasID)
+	sq := `SELECT s.id, COALESCE(s.nis,''), s.nama, s.kelas_id, k.nama
+	       FROM santri s JOIN kelas k ON k.id = s.kelas_id
+	       WHERE s.is_active = 1`
+	sargs := []interface{}{}
+	if kelasID != "" {
+		sq += ` AND s.kelas_id = ?`
+		sargs = append(sargs, kelasID)
+	}
+	sq += ` ORDER BY k.aktif DESC, k.nama, s.nama`
+
+	srows, err := h.DB.Query(sq, sargs...)
 	if err != nil {
 		httpx.Error(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
@@ -62,18 +73,25 @@ func (h *Handler) GetSPP(w http.ResponseWriter, r *http.Request) {
 	idx := map[int64]int{}
 	for srows.Next() {
 		var it sppItem
-		_ = srows.Scan(&it.SantriID, &it.NIS, &it.Nama)
+		_ = srows.Scan(&it.SantriID, &it.NIS, &it.Nama, &it.KelasID, &it.Kelas)
 		it.Bulan = map[int]bool{}
+		it.Ket = map[int]string{}
 		idx[it.SantriID] = len(items)
 		items = append(items, it)
 	}
 	srows.Close()
 
-	prows, err := h.DB.Query(`
-		SELECT sp.santri_id, sp.bulan, sp.lunas
-		FROM spp sp JOIN santri s ON s.id = sp.santri_id
-		WHERE s.kelas_id = ? AND ((sp.tahun = ? AND sp.bulan >= 7) OR (sp.tahun = ? AND sp.bulan <= 6))`,
-		kelasID, startYear, startYear+1)
+	pq := `SELECT sp.santri_id, sp.bulan, sp.lunas, COALESCE(sp.keterangan,'')
+	       FROM spp sp JOIN santri s ON s.id = sp.santri_id
+	       WHERE s.is_active = 1
+	         AND ((sp.tahun = ? AND sp.bulan >= 7) OR (sp.tahun = ? AND sp.bulan <= 6))`
+	pargs := []interface{}{startYear, startYear + 1}
+	if kelasID != "" {
+		pq += ` AND s.kelas_id = ?`
+		pargs = append(pargs, kelasID)
+	}
+
+	prows, err := h.DB.Query(pq, pargs...)
 	if err != nil {
 		httpx.Error(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
@@ -81,10 +99,18 @@ func (h *Handler) GetSPP(w http.ResponseWriter, r *http.Request) {
 	for prows.Next() {
 		var sid, bln int64
 		var lunas bool
-		_ = prows.Scan(&sid, &bln, &lunas)
-		if i, ok := idx[sid]; ok && lunas {
+		var ket string
+		_ = prows.Scan(&sid, &bln, &lunas, &ket)
+		i, ok := idx[sid]
+		if !ok {
+			continue
+		}
+		if lunas {
 			items[i].Bulan[int(bln)] = true
 			items[i].Lunas++
+		}
+		if ket != "" {
+			items[i].Ket[int(bln)] = ket
 		}
 	}
 	prows.Close()
@@ -137,14 +163,17 @@ func (h *Handler) ToggleSPP(w http.ResponseWriter, r *http.Request) {
 type sppBatchReq struct {
 	Tahun int `json:"tahun"` // TA start year
 	Items []struct {
-		SantriID int64 `json:"santri_id"`
-		Bulan    int   `json:"bulan"` // bulan kalender 1..12
-		Lunas    bool  `json:"lunas"`
+		SantriID   int64   `json:"santri_id"`
+		Bulan      int     `json:"bulan"` // bulan kalender 1..12
+		Lunas      bool    `json:"lunas"`
+		Keterangan *string `json:"keterangan"` // nil = jangan ubah keterangan
 	} `json:"items"`
 }
 
-// POST /spp/batch — set banyak sel SPP sekaligus (satu transaksi).
-// Dipakai untuk aksi massal: sapu/drag, satu kolom bulan, satu baris santri, atau semua.
+// POST /spp/batch — simpan seluruh perubahan (draft) dari halaman SPP sekaligus.
+// Seluruh sel disimpan dalam SATU transaksi dan dicatat sebagai satu `batch` di
+// tabel riwayat, sehingga bisa dikembalikan utuh lewat tombol "Kembalikan".
+// Sel yang nilainya tidak benar-benar berubah dilewati agar riwayat tetap bersih.
 func (h *Handler) SaveSPPBatch(w http.ResponseWriter, r *http.Request) {
 	var req sppBatchReq
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -158,6 +187,10 @@ func (h *Handler) SaveSPPBatch(w http.ResponseWriter, r *http.Request) {
 	for _, it := range req.Items {
 		if it.SantriID == 0 || it.Bulan < 1 || it.Bulan > 12 {
 			httpx.Error(w, http.StatusBadRequest, "BAD_REQUEST", "santri_id dan bulan (1-12) wajib")
+			return
+		}
+		if it.Keterangan != nil && len(*it.Keterangan) > 255 {
+			httpx.Error(w, http.StatusBadRequest, "BAD_REQUEST", "Keterangan maksimal 255 karakter")
 			return
 		}
 	}
@@ -176,7 +209,34 @@ func (h *Handler) SaveSPPBatch(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback()
 
-	stmt, err := tx.Prepare(`
+	// kondisi sebelum diubah — untuk riwayat & agar sel yang tak berubah dilewati
+	idSet := map[int64]bool{}
+	for _, it := range req.Items {
+		idSet[it.SantriID] = true
+	}
+	ids := make([]int64, 0, len(idSet))
+	for id := range idSet {
+		ids = append(ids, id)
+	}
+	lama, err := ambilNilaiLama(tx, ids, req.Tahun)
+	if err != nil {
+		httpx.Error(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+		return
+	}
+
+	// dua varian upsert: dengan / tanpa menyentuh kolom keterangan
+	upsertKet, err := tx.Prepare(`
+		INSERT INTO spp (santri_id, tahun, bulan, lunas, keterangan, tanggal_bayar, created_by)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
+		ON DUPLICATE KEY UPDATE lunas = VALUES(lunas), keterangan = VALUES(keterangan),
+		                        tanggal_bayar = VALUES(tanggal_bayar)`)
+	if err != nil {
+		httpx.Error(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+		return
+	}
+	defer upsertKet.Close()
+
+	upsert, err := tx.Prepare(`
 		INSERT INTO spp (santri_id, tahun, bulan, lunas, tanggal_bayar, created_by)
 		VALUES (?, ?, ?, ?, ?, ?)
 		ON DUPLICATE KEY UPDATE lunas = VALUES(lunas), tanggal_bayar = VALUES(tanggal_bayar)`)
@@ -184,25 +244,79 @@ func (h *Handler) SaveSPPBatch(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
 	}
-	defer stmt.Close()
+	defer upsert.Close()
 
+	catat, err := tx.Prepare(`
+		INSERT INTO spp_riwayat (batch_id, santri_id, tahun, bulan, lunas_lama, lunas_baru,
+		                         ket_lama, ket_baru, aksi, created_by)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'simpan', ?)`)
+	if err != nil {
+		httpx.Error(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+		return
+	}
+	defer catat.Close()
+
+	batchID := newBatchID()
 	saved := 0
 	for _, it := range req.Items {
+		calY := calTahun(req.Tahun, it.Bulan)
+		sebelum := lama[selKey{SantriID: it.SantriID, Tahun: calY, Bulan: it.Bulan}]
+
+		ketBaru := sebelum.Ket // default: tidak berubah
+		if it.Keterangan != nil {
+			ketBaru = sql.NullString{String: *it.Keterangan, Valid: *it.Keterangan != ""}
+		}
+		// lewati bila benar-benar tidak ada perubahan
+		if sebelum.Ada && sebelum.Lunas == it.Lunas &&
+			sebelum.Ket.Valid == ketBaru.Valid && sebelum.Ket.String == ketBaru.String {
+			continue
+		}
+
 		var tgl interface{}
 		if it.Lunas {
 			tgl = hariIni
 		}
-		if _, err := stmt.Exec(it.SantriID, calTahun(req.Tahun, it.Bulan), it.Bulan, it.Lunas, tgl, userID); err != nil {
+		if it.Keterangan != nil {
+			if _, err := upsertKet.Exec(it.SantriID, calY, it.Bulan, it.Lunas, ketBaru, tgl, userID); err != nil {
+				httpx.Error(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+				return
+			}
+		} else {
+			if _, err := upsert.Exec(it.SantriID, calY, it.Bulan, it.Lunas, tgl, userID); err != nil {
+				httpx.Error(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+				return
+			}
+		}
+
+		var lunasLama interface{}
+		if sebelum.Ada {
+			lunasLama = sebelum.Lunas
+		}
+		if _, err := catat.Exec(batchID, it.SantriID, calY, it.Bulan, lunasLama, it.Lunas,
+			sebelum.Ket, ketBaru, userID); err != nil {
 			httpx.Error(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 			return
 		}
 		saved++
 	}
+
+	if saved > 0 {
+		if _, err := tx.Exec(`
+			INSERT INTO spp_riwayat_batch (batch_id, aksi, jumlah_sel, tahun_ajaran, created_by)
+			VALUES (?, 'simpan', ?, ?, ?)`, batchID, saved, req.Tahun, userID); err != nil {
+			httpx.Error(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+			return
+		}
+	}
 	if err := tx.Commit(); err != nil {
 		httpx.Error(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
 	}
-	httpx.JSON(w, http.StatusOK, map[string]interface{}{"saved": saved})
+	resp := map[string]interface{}{"saved": saved}
+	if saved > 0 {
+		resp["batch_id"] = batchID
+	}
+	httpx.JSON(w, http.StatusOK, resp)
 }
 
 // GET /spp/export?kelas_id=&tahun=

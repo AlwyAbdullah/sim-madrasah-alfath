@@ -108,6 +108,9 @@ func main() {
 				r.Post("/spp/toggle", h.ToggleSPP)
 				r.Post("/spp/batch", h.SaveSPPBatch)
 				r.Get("/spp/export", h.ExportSPP)
+				r.Get("/spp/riwayat", h.ListRiwayatSPP)
+				r.Get("/spp/riwayat/{batch}/detail", h.DetailRiwayatSPP)
+				r.Post("/spp/riwayat/{batch}/kembalikan", h.KembalikanBatchSPP)
 
 				// Master CRUD
 				r.Post("/kelas", h.CreateKelas)
