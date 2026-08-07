@@ -1,0 +1,12 @@
+[Unit]
+Description=Backup harian database SIM-Madrasah
+After=mysql.service
+Requires=mysql.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/sim-madrasah-backup.sh
+# Jalan sebagai root agar mysqldump memakai autentikasi socket (tanpa password tersimpan).
+User=root
+Nice=10
+IOSchedulingClass=idle

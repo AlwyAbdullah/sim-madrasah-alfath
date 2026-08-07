@@ -1,0 +1,13 @@
+[Unit]
+Description=Jadwal backup harian database SIM-Madrasah
+
+[Timer]
+# Setiap hari pukul 02:00 waktu server.
+OnCalendar=*-*-* 02:00:00
+# Bila VPS sedang mati saat jadwalnya, jalankan segera setelah menyala kembali.
+Persistent=true
+# Acak 0-5 menit agar tidak bentrok dengan tugas terjadwal lain.
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

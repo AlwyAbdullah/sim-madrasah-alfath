@@ -15,8 +15,54 @@
 >   **Notifikasi WA**) — sesi tetap tersimpan, tidak perlu scan ulang. Nyalakan lagi:
 >   `cd /home/deploy/waha && docker compose start` lalu toggle "Aktifkan" di halaman **Notifikasi WA**.
 >   Detail & alternatif (n8n) di `docs/BOT-NOTIFIKASI-WA.md`.
+> - **Backup database:** ✅ otomatis **tiap hari 02:00** via `sim-madrasah-backup.timer`
+>   → `/home/deploy/backups/`. Retensi: **30 hari** harian + backup tanggal 1 disimpan **1 tahun**.
+>   Skrip memverifikasi hasilnya (uji gzip, jumlah tabel, penanda "Dump completed") dan gagal
+>   bila mencurigakan. Ikut menyimpan salinan konfigurasi (`config-*.tar.gz`, perm 600, berisi rahasia).
+>   Cek: `systemctl list-timers sim-madrasah-backup.timer` · `journalctl -u sim-madrasah-backup -e`
+>   Jalankan manual: `sudo systemctl start sim-madrasah-backup.service`
+>   **Cara pulih → lihat bagian "Pemulihan Darurat" di bawah.**
 >
 > Bagian di bawah = panduan generik/dari nol (referensi).
+
+---
+
+## 🚨 Pemulihan Darurat (restore database)
+
+Backup harian ada di `/home/deploy/backups/` sebagai `sim_madrasah-TANGGAL_JAM.sql.gz`.
+
+**1. Lihat backup yang tersedia**
+```bash
+ls -lht /home/deploy/backups/
+```
+
+**2. Uji dulu ke database sementara (SANGAT disarankan sebelum menimpa yang asli)**
+```bash
+FILE=/home/deploy/backups/sim_madrasah-2026-08-07_155640.sql.gz   # ganti sesuai pilihan
+sudo mysql -e "DROP DATABASE IF EXISTS uji_pulih; CREATE DATABASE uji_pulih CHARACTER SET utf8mb4;"
+zcat "$FILE" | sudo mysql uji_pulih
+sudo mysql -e "SELECT COUNT(*) AS santri FROM uji_pulih.santri; SELECT COUNT(*) AS spp FROM uji_pulih.spp;"
+```
+Bila angkanya masuk akal, lanjut. Bersihkan setelahnya: `sudo mysql -e "DROP DATABASE uji_pulih;"`
+
+**3. Pulihkan ke database asli** (⚠️ menimpa data sekarang — pastikan langkah 2 sudah dicek)
+```bash
+sudo systemctl stop sim-madrasah-backend           # hentikan dulu agar tidak ada tulisan masuk
+sudo mysqldump --single-transaction sim_madrasah | gzip > /home/deploy/backups/SEBELUM-PULIH-$(date +%F_%H%M%S).sql.gz
+zcat "$FILE" | sudo mysql sim_madrasah
+sudo systemctl start sim-madrasah-backend
+```
+Langkah `mysqldump` di tengah membuat cadangan kondisi **sebelum** dipulihkan — jaring pengaman
+kalau ternyata salah pilih berkas.
+
+**4. Bila server benar-benar hilang (bangun dari nol)**
+Selain `.sql.gz`, ada `config-*.tar.gz` berisi `.env` backend/frontend, konfigurasi WAHA,
+nginx, dan unit systemd. Bongkar dengan `sudo tar xzf config-XXX.tar.gz -C /` setelah aplikasi
+dipasang ulang, lalu pulihkan database seperti langkah 3.
+
+> 💡 Backup tersimpan **di VPS yang sama**. Untuk perlindungan terhadap kegagalan total server,
+> unduh berkalanya ke komputer lain:
+> `scp -i ~/.ssh/id_ed25519 deploy@103.175.219.47:/home/deploy/backups/sim_madrasah-*.sql.gz .`
 
 # Panduan Deploy SIM-Madrasah ke VPS
 
