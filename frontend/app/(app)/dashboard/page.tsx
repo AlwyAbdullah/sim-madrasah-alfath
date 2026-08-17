@@ -21,6 +21,12 @@ export default function DashboardPage() {
   const [open, setOpen] = useState(false);
   const blurTimer = useRef<any>(null);
 
+  // status pengisian absensi hari ini (untuk banner pengingat)
+  const [statusAbsen, setStatusAbsen] = useState<any>(null);
+  useEffect(() => {
+    api(`/pengingat-absensi?tanggal=${tanggal}`).then(setStatusAbsen).catch(() => {});
+  }, [tanggal]);
+
   useEffect(() => { api("/kelas?aktif=1").then(setKelas).catch(() => {}); }, []);
 
   useEffect(() => {
@@ -62,6 +68,36 @@ export default function DashboardPage() {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
       <h1 style={{ margin: 0 }}>Dashboard</h1>
+
+      {/* Pengingat: kelas yang belum/baru sebagian diabsen pada tanggal terpilih.
+          Hanya muncul di hari sekolah (Sabtu–Rabu, di luar hari libur). */}
+      {statusAbsen?.hari_sekolah && (statusAbsen.ringkasan?.belum > 0 || statusAbsen.ringkasan?.sebagian > 0) && (
+        <div className="card" style={{ padding: 14, borderLeft: "4px solid var(--warn)", background: "#fffbeb" }}>
+          <div style={{ display: "flex", gap: 10, alignItems: "flex-start", flexWrap: "wrap" }}>
+            <span style={{ fontSize: 20 }}>⏰</span>
+            <div style={{ flex: 1, minWidth: 240 }}>
+              <strong>
+                {statusAbsen.ringkasan.belum > 0 && `${statusAbsen.ringkasan.belum} kelas belum diabsen`}
+                {statusAbsen.ringkasan.belum > 0 && statusAbsen.ringkasan.sebagian > 0 && " · "}
+                {statusAbsen.ringkasan.sebagian > 0 && `${statusAbsen.ringkasan.sebagian} kelas baru sebagian`}
+              </strong>
+              <span className="muted"> — {tanggal}</span>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
+                {statusAbsen.kelas.filter((k: any) => k.status !== "lengkap").map((k: any) => (
+                  <span key={k.kelas_id} style={{
+                    fontSize: 12, padding: "3px 9px", borderRadius: 999, fontWeight: 600,
+                    background: k.status === "belum" ? "#fee2e2" : "#fef3c7",
+                    color: k.status === "belum" ? "#991b1b" : "#92400e",
+                  }}>
+                    {k.kelas}{k.status === "sebagian" ? ` (${k.terisi}/${k.santri})` : ""}
+                  </span>
+                ))}
+              </div>
+            </div>
+            <a href="/absensi" className="btn" style={{ textDecoration: "none" }}>Isi Absensi →</a>
+          </div>
+        </div>
+      )}
 
       <div className="row">
         <select className="input" value={kelasId} onChange={(e) => setKelasId(e.target.value)}>

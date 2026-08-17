@@ -34,6 +34,10 @@ export default function NotifikasiPage() {
   const [aktif, setAktif] = useState<boolean | null>(null); // null = belum termuat
   const [mengubah, setMengubah] = useState(false);
 
+  // pengaturan pengingat absensi harian
+  const [ping, setPing] = useState<{ aktif: boolean; jam: number; menit: number } | null>(null);
+  const [simpanPing, setSimpanPing] = useState(false);
+
   const load = useCallback(async () => {
     const d = await api(`/notifikasi${status ? `?status=${status}` : ""}`);
     setItems(d.items || []);
@@ -43,7 +47,20 @@ export default function NotifikasiPage() {
   useEffect(() => { load().catch((e) => setMsg(e.message)); }, [load]);
   useEffect(() => {
     api("/notifikasi/pengaturan").then((d) => setAktif(!!d.aktif)).catch(() => {});
+    api("/pengingat-absensi").then((d) => setPing(d.pengaturan)).catch(() => {});
   }, []);
+
+  async function simpanPengingat(baru: { aktif: boolean; jam: number; menit: number }) {
+    setSimpanPing(true);
+    try {
+      const d = await api("/pengingat-absensi", { method: "POST", body: baru });
+      setPing(d);
+      setMsg(d.aktif
+        ? `Pengingat absensi aktif setiap pukul ${String(d.jam).padStart(2, "0")}.${String(d.menit).padStart(2, "0")}.`
+        : "Pengingat absensi dimatikan.");
+    } catch (e: any) { setMsg(e.message); }
+    finally { setSimpanPing(false); }
+  }
 
   async function toggleAktif() {
     const nilaiBaru = !aktif;
@@ -97,6 +114,39 @@ export default function NotifikasiPage() {
         >
           {mengubah ? "Menyimpan…" : aktif ? "🔕 Matikan" : "🔔 Aktifkan"}
         </button>
+      </div>
+
+      {/* ===== pengingat absensi harian ===== */}
+      <div className="card" style={{ padding: 14 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+          <div>
+            <strong>⏰ Pengingat absensi harian: </strong>
+            {ping === null ? <span className="muted">memuat…</span>
+              : <span className={`badge ${ping.aktif ? "hadir" : "alpha"}`}>{ping.aktif ? "Aktif" : "Nonaktif"}</span>}
+            <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
+              Bila masih ada kelas yang belum diabsen, pengingat dikirim ke WhatsApp admin.
+              Otomatis dilewati pada Kamis, Jumat, dan hari libur.
+            </div>
+          </div>
+          {ping && (
+            <div className="row" style={{ gap: 8 }}>
+              <span className="muted" style={{ fontSize: 13 }}>Jam</span>
+              <input className="input" type="time" style={{ width: 130 }}
+                value={`${String(ping.jam).padStart(2, "0")}:${String(ping.menit).padStart(2, "0")}`}
+                onChange={(e) => {
+                  const [j, m] = e.target.value.split(":").map(Number);
+                  if (!isNaN(j) && !isNaN(m)) setPing({ ...ping, jam: j, menit: m });
+                }} />
+              <button className="btn secondary" disabled={simpanPing}
+                onClick={() => simpanPengingat(ping)}>Simpan jam</button>
+              <button className={ping.aktif ? "btn secondary" : "btn"} disabled={simpanPing}
+                style={ping.aktif ? { color: "var(--danger)" } : undefined}
+                onClick={() => simpanPengingat({ ...ping, aktif: !ping.aktif })}>
+                {ping.aktif ? "🔕 Matikan" : "🔔 Aktifkan"}
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="row" style={{ fontSize: 13 }}>

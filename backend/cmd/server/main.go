@@ -29,6 +29,9 @@ func main() {
 
 	// Worker pengirim notifikasi WhatsApp (nonaktif otomatis bila WAHA_URL kosong).
 	go notifworker.Run(conn, cfg)
+	// Pengingat harian bila masih ada kelas yang belum diabsen (tidak butuh WAHA:
+	// pesan diantrekan, terkirim sendiri saat WAHA menyala).
+	go notifworker.RunPengingatAbsensi(conn)
 
 	r := chi.NewRouter()
 	r.Use(chimw.Logger)
@@ -72,6 +75,8 @@ func main() {
 
 			// Dashboard
 			r.Get("/dashboard/summary", h.Summary)
+			// status pengisian absensi hari ini (banner Dashboard — guru juga perlu melihat)
+			r.Get("/pengingat-absensi", h.GetPengingatAbsensi)
 			r.Get("/santri/{id}/detail", h.SantriDetail)
 
 			// Rapor
@@ -154,6 +159,7 @@ func main() {
 				r.Post("/notifikasi/{id}/batal", h.BatalNotifikasi)
 				r.Get("/notifikasi/pengaturan", h.GetPengaturanNotifikasi)
 				r.Post("/notifikasi/pengaturan", h.SetPengaturanNotifikasi)
+				r.Post("/pengingat-absensi", h.SetPengingatAbsensi)
 
 				// Absensi guru + rekap (bulan/semester/tahun)
 				r.Get("/absensi-guru", h.GetAbsensiGuru)
