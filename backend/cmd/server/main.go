@@ -81,6 +81,8 @@ func main() {
 			r.Get("/absensi", h.GetAbsensi)
 			r.Post("/absensi/batch", h.SaveAbsensi)
 			r.Get("/absensi/export", h.ExportAbsensi)
+			r.Get("/absensi/rekap", h.RekapAbsensi)
+			r.Get("/absensi/rekap/export", h.ExportRekapAbsensi)
 
 			// Nilai
 			r.Get("/nilai", h.GetNilai)

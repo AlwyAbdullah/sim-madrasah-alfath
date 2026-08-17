@@ -8,6 +8,7 @@ import { api } from "@/lib/api";
 const NAV = [
   { href: "/dashboard", label: "Dashboard", icon: "📊" },
   { href: "/absensi", label: "Absensi", icon: "🗓️" },
+  { href: "/rekap-absensi", label: "Rekap Kehadiran", icon: "📈" },
   { href: "/nilai", label: "Nilai", icon: "📝" },
   { href: "/leger", label: "Leger & Peringkat", icon: "🏆" },
   { href: "/rapor", label: "Rapor", icon: "📄" },
