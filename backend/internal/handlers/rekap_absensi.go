@@ -77,11 +77,19 @@ type rekapBulan struct {
 	rekapAngka
 }
 
+// alphaTanggal = satu kejadian alpha beserta keterangan bila guru mengisinya.
+type alphaTanggal struct {
+	Tanggal    string `json:"tanggal"` // YYYY-MM-DD
+	Keterangan string `json:"keterangan,omitempty"`
+}
+
 type rekapSantri struct {
 	SantriID int64  `json:"santri_id"`
 	Nama     string `json:"nama"`
 	Kelas    string `json:"kelas"`
 	rekapAngka
+	// Rincian tanggal alpha agar bisa langsung ditindaklanjuti (dihubungi wali, dll).
+	TanggalAlpha []alphaTanggal `json:"tanggal_alpha"`
 }
 
 // dataRekap menyusun seluruh angka rekap dalam satu tempat, dipakai oleh
@@ -223,6 +231,29 @@ func (h *Handler) dataRekap(from, to, kelasID string) (rekapAngka, int, []rekapK
 	for i := range perSantri {
 		perSantri[i].hitung()
 	}
+
+	// rincian TANGGAL setiap alpha (beserta keterangan bila ada)
+	rows, err = h.DB.Query(`
+		SELECT a.santri_id, a.tanggal, COALESCE(a.keterangan, '')
+		FROM absensi a JOIN santri s ON s.id = a.santri_id
+		WHERE a.status = 'alpha' AND a.tanggal BETWEEN ? AND ?`+filterKelas+filterHariEfektif+`
+		ORDER BY a.santri_id, a.tanggal`, args()...)
+	if err != nil {
+		return total, 0, nil, nil, nil, err
+	}
+	for rows.Next() {
+		var sid int64
+		var tgl time.Time
+		var ket string
+		if err := rows.Scan(&sid, &tgl, &ket); err != nil {
+			continue
+		}
+		if i, ada := idxSantri[sid]; ada {
+			perSantri[i].TanggalAlpha = append(perSantri[i].TanggalAlpha,
+				alphaTanggal{Tanggal: tgl.Format("2006-01-02"), Keterangan: ket})
+		}
+	}
+	rows.Close()
 
 	// urutkan: alpha terbanyak dulu, lalu persentase kehadiran terendah
 	for i := 1; i < len(perSantri); i++ {
@@ -371,15 +402,26 @@ func (h *Handler) ExportRekapAbsensi(w http.ResponseWriter, r *http.Request) {
 	f.SetCellValue(s2, "A1", "KEHADIRAN PER SANTRI — "+label)
 	f.SetCellStyle(s2, "A1", "A1", judul)
 	f.SetCellValue(s2, "A2", "Diurutkan dari alpha terbanyak")
-	for i, h := range []string{"No", "Nama", "Kelas", "Hadir", "Izin", "Sakit", "Alpha", "Total", "% Hadir"} {
+	for i, h := range []string{"No", "Nama", "Kelas", "Hadir", "Izin", "Sakit", "Alpha", "Total", "% Hadir", "Tanggal Alpha"} {
 		cell, _ := excelize.CoordinatesToCellName(i+1, 4)
 		f.SetCellValue(s2, cell, h)
 	}
 	c1, _ = excelize.CoordinatesToCellName(1, 4)
-	c2, _ = excelize.CoordinatesToCellName(9, 4)
+	c2, _ = excelize.CoordinatesToCellName(10, 4)
 	f.SetCellStyle(s2, c1, c2, kepala)
 	for i, s := range perSantri {
-		vals := []interface{}{i + 1, s.Nama, s.Kelas, s.Hadir, s.Izin, s.Sakit, s.Alpha, s.Total, fmt.Sprintf("%.1f%%", s.Persen)}
+		tglAlpha := ""
+		for j, t := range s.TanggalAlpha {
+			if j > 0 {
+				tglAlpha += ", "
+			}
+			tglAlpha += t.Tanggal
+			if t.Keterangan != "" {
+				tglAlpha += " (" + t.Keterangan + ")"
+			}
+		}
+		vals := []interface{}{i + 1, s.Nama, s.Kelas, s.Hadir, s.Izin, s.Sakit, s.Alpha, s.Total,
+			fmt.Sprintf("%.1f%%", s.Persen), tglAlpha}
 		for j, v := range vals {
 			cell, _ := excelize.CoordinatesToCellName(j+1, i+5)
 			f.SetCellValue(s2, cell, v)
@@ -389,6 +431,7 @@ func (h *Handler) ExportRekapAbsensi(w http.ResponseWriter, r *http.Request) {
 	f.SetColWidth(s2, "B", "B", 28)
 	f.SetColWidth(s2, "C", "C", 14)
 	f.SetColWidth(s2, "D", "I", 9)
+	f.SetColWidth(s2, "J", "J", 60)
 
 	filename := fmt.Sprintf("RekapKehadiran_%s_%s.xlsx", from, to)
 	w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")

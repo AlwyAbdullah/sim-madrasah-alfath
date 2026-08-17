@@ -7,7 +7,8 @@ type Kelas = { id: number; nama: string };
 type Angka = { hadir: number; izin: number; sakit: number; alpha: number; total: number; persen: number };
 type PerKelas = Angka & { kelas_id: number; kelas: string; santri: number };
 type PerBulan = Angka & { bulan: string };
-type PerSantri = Angka & { santri_id: number; nama: string; kelas: string };
+type AlphaTanggal = { tanggal: string; keterangan?: string };
+type PerSantri = Angka & { santri_id: number; nama: string; kelas: string; tanggal_alpha: AlphaTanggal[] };
 type Rekap = {
   from: string; to: string; hari_efektif: number;
   ringkasan: Angka; per_kelas: PerKelas[]; per_bulan: PerBulan[]; perhatian: PerSantri[];
@@ -32,6 +33,45 @@ function rentang(mode: string, bulan: string, tahun: number, semester: string, d
     return { from: `${tahun}-01-01`, to: `${tahun}-12-31`, label: `Tahun ${tahun}` };
   }
   return { from: dari, to: sampai, label: `${dari} s/d ${sampai}` };
+}
+
+/** "2026-08-15" → "15 Agu" (tahun ikut ditampilkan bila bukan tahun berjalan). */
+function tanggalRingkas(iso: string) {
+  const [y, m, d] = iso.split("-").map(Number);
+  const singkat = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
+  const th = new Date().getFullYear();
+  return `${d} ${singkat[m - 1]}${y !== th ? " " + y : ""}`;
+}
+
+/** Daftar tanggal alpha sebagai label kecil; bisa dilipat bila banyak. */
+function TanggalAlpha({ daftar }: { daftar: AlphaTanggal[] }) {
+  const [semua, setSemua] = useState(false);
+  if (!daftar || daftar.length === 0) return <span className="muted">—</span>;
+  const BATAS = 6;
+  const tampil = semua ? daftar : daftar.slice(0, BATAS);
+  const sisa = daftar.length - tampil.length;
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 4, alignItems: "center" }}>
+      {tampil.map((t, i) => (
+        <span key={i} title={t.keterangan ? `${t.tanggal} — ${t.keterangan}` : t.tanggal}
+          style={{
+            fontSize: 12, padding: "2px 7px", borderRadius: 999, whiteSpace: "nowrap",
+            background: "#fee2e2", color: "#991b1b", fontWeight: 600,
+            border: t.keterangan ? "1px dashed #991b1b" : "1px solid transparent",
+          }}>
+          {tanggalRingkas(t.tanggal)}{t.keterangan ? " 📝" : ""}
+        </span>
+      ))}
+      {sisa > 0 && (
+        <button className="btn secondary" style={{ padding: "1px 8px", fontSize: 12 }}
+          onClick={() => setSemua(true)}>+{sisa} lagi</button>
+      )}
+      {semua && daftar.length > BATAS && (
+        <button className="btn secondary" style={{ padding: "1px 8px", fontSize: 12 }}
+          onClick={() => setSemua(false)}>ringkas</button>
+      )}
+    </div>
+  );
 }
 
 /** Bar persentase sederhana — hijau bila baik, merah bila rendah. */
@@ -262,30 +302,39 @@ export default function RekapAbsensiPage() {
                 Tidak ada santri dengan alpha ≥ {ambangAlpha} pada periode ini. 👍
               </p>
             ) : (
+              <>
+              <div className="muted" style={{ padding: "6px 14px 0", fontSize: 12 }}>
+                Tanggal bergaris putus-putus dan bertanda 📝 berarti guru menuliskan keterangan — arahkan kursor untuk membacanya.
+              </div>
               <div className="table-wrap">
                 <table>
                   <thead>
                     <tr>
-                      <th style={{ width: 40 }}>#</th><th>Nama</th><th style={{ width: 110 }}>Kelas</th>
-                      <th style={{ width: 70 }}>Alpha</th><th style={{ width: 60 }}>Izin</th>
-                      <th style={{ width: 60 }}>Sakit</th><th style={{ width: 180 }}>Kehadiran</th>
+                      <th style={{ width: 40 }}>#</th><th style={{ minWidth: 150 }}>Nama</th>
+                      <th style={{ width: 100 }}>Kelas</th>
+                      <th style={{ width: 60 }}>Alpha</th>
+                      <th style={{ minWidth: 220 }}>Tanggal Alpha</th>
+                      <th style={{ width: 160 }}>Kehadiran</th>
                     </tr>
                   </thead>
                   <tbody>
                     {perhatian.map((s, i) => (
                       <tr key={s.santri_id}>
                         <td>{i + 1}</td>
-                        <td>{s.nama}</td>
+                        <td>
+                          {s.nama}
+                          <div className="muted" style={{ fontSize: 11 }}>izin {s.izin} · sakit {s.sakit}</div>
+                        </td>
                         <td>{s.kelas}</td>
                         <td><span className="badge alpha">{s.alpha}</span></td>
-                        <td>{s.izin}</td>
-                        <td>{s.sakit}</td>
+                        <td><TanggalAlpha daftar={s.tanggal_alpha} /></td>
                         <td><Bar persen={s.persen} /></td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
+              </>
             )}
           </div>
         </>
