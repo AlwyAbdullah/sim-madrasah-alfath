@@ -93,26 +93,42 @@ func periksaDanKirim(db *sql.DB, now time.Time) error {
 
 	pesan := susunPesan(now, belum, sebagian, lengkap)
 
-	tujuan, err := nomorAdmin(db)
-	if err != nil || len(tujuan) == 0 {
+	// Utamakan Telegram (API resmi, tanpa risiko blokir). Bila chat Telegram belum
+	// diatur, jatuh kembali ke WhatsApp memakai nomor admin.
+	kanal, tujuan := tujuanPengingat(db)
+	if len(tujuan) == 0 {
 		// tetap tandai supaya tidak berulang; tapi catat agar admin tahu
 		tandaiPengingatTerkirim(db, hariIni)
-		log.Printf("pengingat-absensi: tidak ada nomor WA admin yang bisa dituju — pengingat dilewati")
+		log.Printf("pengingat-absensi: belum ada tujuan (chat Telegram / nomor WA admin) — pengingat dilewati")
 		return nil
 	}
 
-	for _, no := range tujuan {
+	for _, t := range tujuan {
 		if _, err := db.Exec(`
-			INSERT INTO notifikasi_wa (santri_id, jenis, ref_tanggal, tujuan, pesan, status)
-			VALUES (NULL, ?, ?, ?, ?, 'pending')`,
-			jenisPengingatAbsensi, hariIni, no, pesan); err != nil {
+			INSERT INTO notifikasi_wa (santri_id, jenis, kanal, ref_tanggal, tujuan, pesan, status)
+			VALUES (NULL, ?, ?, ?, ?, ?, 'pending')`,
+			jenisPengingatAbsensi, kanal, hariIni, t, pesan); err != nil {
 			return fmt.Errorf("gagal mengantrekan pengingat: %w", err)
 		}
 	}
 	tandaiPengingatTerkirim(db, hariIni)
-	log.Printf("pengingat-absensi: %s diantrekan ke %d nomor (%d kelas belum, %d sebagian)",
-		hariIni, len(tujuan), len(belum), len(sebagian))
+	log.Printf("pengingat-absensi: %s diantrekan lewat %s ke %d tujuan (%d kelas belum, %d sebagian)",
+		hariIni, kanal, len(tujuan), len(belum), len(sebagian))
 	return nil
+}
+
+// tujuanPengingat memilih kanal & daftar tujuan pengiriman.
+func tujuanPengingat(db *sql.DB) (string, []string) {
+	var chatID sql.NullString
+	_ = db.QueryRow(`SELECT chat_id FROM telegram_pengaturan WHERE id = 1`).Scan(&chatID)
+	if chatID.Valid && strings.TrimSpace(chatID.String) != "" {
+		return "telegram", []string{strings.TrimSpace(chatID.String)}
+	}
+	nomor, err := nomorAdmin(db)
+	if err != nil {
+		return "whatsapp", nil
+	}
+	return "whatsapp", nomor
 }
 
 func tandaiPengingatTerkirim(db *sql.DB, tanggal string) {

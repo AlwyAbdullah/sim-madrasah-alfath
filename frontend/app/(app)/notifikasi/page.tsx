@@ -7,6 +7,7 @@ type Item = {
   id: number;
   nama: string;
   jenis: string;
+  kanal: string;
   ref_tanggal: string | null;
   tujuan: string;
   pesan: string;
@@ -38,6 +39,11 @@ export default function NotifikasiPage() {
   const [ping, setPing] = useState<{ aktif: boolean; jam: number; menit: number } | null>(null);
   const [simpanPing, setSimpanPing] = useState(false);
 
+  // pengaturan Telegram
+  const [tg, setTg] = useState<{ token_terpasang: boolean; chat_id: string } | null>(null);
+  const [tgChat, setTgChat] = useState("");
+  const [tgSibuk, setTgSibuk] = useState(false);
+
   const load = useCallback(async () => {
     const d = await api(`/notifikasi${status ? `?status=${status}` : ""}`);
     setItems(d.items || []);
@@ -48,7 +54,27 @@ export default function NotifikasiPage() {
   useEffect(() => {
     api("/notifikasi/pengaturan").then((d) => setAktif(!!d.aktif)).catch(() => {});
     api("/pengingat-absensi").then((d) => setPing(d.pengaturan)).catch(() => {});
+    api("/telegram/pengaturan").then((d) => { setTg(d); setTgChat(d.chat_id || ""); }).catch(() => {});
   }, []);
+
+  async function simpanTelegram() {
+    setTgSibuk(true);
+    try {
+      const d = await api("/telegram/pengaturan", { method: "POST", body: { chat_id: tgChat } });
+      setTg((t) => (t ? { ...t, chat_id: d.chat_id } : t));
+      setMsg(d.chat_id ? `Tujuan Telegram disimpan: ${d.chat_id}` : "Tujuan Telegram dikosongkan.");
+    } catch (e: any) { setMsg(e.message); }
+    finally { setTgSibuk(false); }
+  }
+
+  async function ujiTelegram() {
+    setTgSibuk(true);
+    try {
+      await api("/telegram/uji", { method: "POST" });
+      setMsg("✅ Pesan uji Telegram terkirim — silakan cek Telegram Anda.");
+    } catch (e: any) { setMsg("❌ " + e.message); }
+    finally { setTgSibuk(false); }
+  }
 
   async function simpanPengingat(baru: { aktif: boolean; jam: number; menit: number }) {
     setSimpanPing(true);
@@ -116,6 +142,38 @@ export default function NotifikasiPage() {
         </button>
       </div>
 
+      {/* ===== kanal Telegram ===== */}
+      <div className="card" style={{ padding: 14 }}>
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+          <div style={{ minWidth: 260, flex: 1 }}>
+            <strong>✈️ Telegram (kanal resmi): </strong>
+            {tg === null ? <span className="muted">memuat…</span>
+              : !tg.token_terpasang ? <span className="badge alpha">Token belum dipasang</span>
+              : tg.chat_id ? <span className="badge hadir">Siap</span>
+              : <span className="badge sakit">Tujuan chat belum diisi</span>}
+            <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+              API resmi Telegram — gratis, tanpa nomor HP, tanpa risiko nomor diblokir.
+              Pengingat absensi dikirim ke sini bila tujuan chat sudah diisi.
+            </div>
+            {tg && !tg.token_terpasang && (
+              <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+                Langkah: buka <strong>@BotFather</strong> di Telegram → <code>/newbot</code> → salin token →
+                minta pengelola memasangnya di server (<code>TELEGRAM_BOT_TOKEN</code>).
+              </div>
+            )}
+          </div>
+          {tg && (
+            <div className="row" style={{ gap: 8, alignItems: "center" }}>
+              <input className="input" style={{ width: 210 }} placeholder="chat_id (mis. -1001234567890)"
+                value={tgChat} onChange={(e) => setTgChat(e.target.value)} />
+              <button className="btn secondary" disabled={tgSibuk} onClick={simpanTelegram}>Simpan</button>
+              <button className="btn" disabled={tgSibuk || !tg.token_terpasang || !tg.chat_id}
+                onClick={ujiTelegram}>Kirim uji</button>
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* ===== pengingat absensi harian ===== */}
       <div className="card" style={{ padding: 14 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
@@ -174,6 +232,7 @@ export default function NotifikasiPage() {
             <thead>
               <tr>
                 <th style={{ width: 150 }}>Santri</th>
+                <th style={{ width: 90 }}>Kanal</th>
                 <th style={{ width: 100 }}>Tanggal</th>
                 <th style={{ width: 120 }}>Tujuan</th>
                 <th>Pesan</th>
@@ -185,6 +244,11 @@ export default function NotifikasiPage() {
               {items.map((it) => (
                 <tr key={it.id}>
                   <td>{it.nama}</td>
+                  <td>
+                    <span className="badge izin" style={{ fontSize: 11 }}>
+                      {it.kanal === "telegram" ? "✈️ Telegram" : "💬 WhatsApp"}
+                    </span>
+                  </td>
                   <td>{it.ref_tanggal || "-"}</td>
                   <td style={{ fontSize: 13 }}>{it.tujuan}</td>
                   <td>

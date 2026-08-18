@@ -29,6 +29,8 @@ func main() {
 
 	// Worker pengirim notifikasi WhatsApp (nonaktif otomatis bila WAHA_URL kosong).
 	go notifworker.Run(conn, cfg)
+	// Pengirim Telegram (API resmi — tanpa risiko blokir nomor).
+	go notifworker.RunTelegram(conn, cfg)
 	// Pengingat harian bila masih ada kelas yang belum diabsen (tidak butuh WAHA:
 	// pesan diantrekan, terkirim sendiri saat WAHA menyala).
 	go notifworker.RunPengingatAbsensi(conn)
@@ -160,6 +162,11 @@ func main() {
 				r.Get("/notifikasi/pengaturan", h.GetPengaturanNotifikasi)
 				r.Post("/notifikasi/pengaturan", h.SetPengaturanNotifikasi)
 				r.Post("/pengingat-absensi", h.SetPengingatAbsensi)
+
+				// Telegram (kanal notifikasi resmi)
+				r.Get("/telegram/pengaturan", h.GetPengaturanTelegram)
+				r.Post("/telegram/pengaturan", h.SetPengaturanTelegram)
+				r.Post("/telegram/uji", h.UjiKirimTelegram)
 
 				// Absensi guru + rekap (bulan/semester/tahun)
 				r.Get("/absensi-guru", h.GetAbsensiGuru)

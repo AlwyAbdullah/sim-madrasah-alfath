@@ -185,7 +185,7 @@ func (h *Handler) ListNotifikasi(w http.ResponseWriter, r *http.Request) {
 			limit = n
 		}
 	}
-	q := `SELECT n.id, COALESCE(s.nama,'-'), n.jenis, n.ref_tanggal, n.tujuan, n.pesan,
+	q := `SELECT n.id, COALESCE(s.nama,'-'), n.jenis, n.kanal, n.ref_tanggal, n.tujuan, n.pesan,
 	             n.status, n.percobaan, n.catatan, n.dikirim_at, n.created_at
 	      FROM notifikasi_wa n LEFT JOIN santri s ON s.id = n.santri_id`
 	args := []interface{}{}
@@ -207,6 +207,7 @@ func (h *Handler) ListNotifikasi(w http.ResponseWriter, r *http.Request) {
 		ID         int64   `json:"id"`
 		Nama       string  `json:"nama"`
 		Jenis      string  `json:"jenis"`
+		Kanal      string  `json:"kanal"`
 		RefTanggal *string `json:"ref_tanggal"`
 		Tujuan     string  `json:"tujuan"`
 		Pesan      string  `json:"pesan"`
@@ -221,7 +222,7 @@ func (h *Handler) ListNotifikasi(w http.ResponseWriter, r *http.Request) {
 		var it item
 		var ref, kirim sql.NullString
 		var created string
-		_ = rows.Scan(&it.ID, &it.Nama, &it.Jenis, &ref, &it.Tujuan, &it.Pesan,
+		_ = rows.Scan(&it.ID, &it.Nama, &it.Jenis, &it.Kanal, &ref, &it.Tujuan, &it.Pesan,
 			&it.Status, &it.Percobaan, &it.Catatan, &kirim, &created)
 		if ref.Valid {
 			t := ref.String

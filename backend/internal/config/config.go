@@ -31,6 +31,11 @@ type Config struct {
 	WahaPollSeconds      int
 	WahaSendDelaySeconds int
 	WahaBatchLimit       int
+
+	// Telegram Bot API (resmi & gratis). Kosong = pengirim Telegram tidak aktif.
+	// Token didapat dari @BotFather; tujuan chat diatur dari halaman admin.
+	TelegramBotToken string
+	TelegramAPIURL   string // dapat diarahkan ke server tiruan saat pengujian
 }
 
 func Load() *Config {
@@ -60,6 +65,9 @@ func Load() *Config {
 		WahaPollSeconds:      getEnvInt("WAHA_POLL_SECONDS", 60),
 		WahaSendDelaySeconds: getEnvInt("WAHA_SEND_DELAY_SECONDS", 8),
 		WahaBatchLimit:       getEnvInt("WAHA_BATCH_LIMIT", 20),
+
+		TelegramBotToken: getEnv("TELEGRAM_BOT_TOKEN", ""),
+		TelegramAPIURL:   getEnv("TELEGRAM_API_URL", "https://api.telegram.org"),
 	}
 }
 
