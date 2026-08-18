@@ -11,7 +11,6 @@ export default function UsersMaster() {
         { key: "username", label: "Username" },
         { key: "nama", label: "Nama" },
         { key: "role", label: "Role" },
-        { key: "whatsapp_number", label: "WhatsApp", render: (r) => r.whatsapp_number ?? "-" },
         { key: "is_active", label: "Status", render: (r) => (r.is_active ? "Aktif" : "Nonaktif") },
       ]}
       fields={[
@@ -26,7 +25,6 @@ export default function UsersMaster() {
           ],
         },
         { key: "password", label: "Password", type: "password", required: true, optionalOnEdit: true },
-        { key: "whatsapp_number", label: "Nomor WhatsApp", placeholder: "mis. 081231372105 (kosongkan jika tidak pakai bot)" },
         { key: "is_active", label: "Status", type: "boolean", hideOnCreate: true },
       ]}
     />

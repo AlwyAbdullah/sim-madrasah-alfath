@@ -1,3 +1,9 @@
+// Package notifworker mengirim antrean notifikasi (tabel `notifikasi`) lewat
+// Telegram Bot API, dan menyusun pengingat berkala (absensi harian, SPP bulanan).
+//
+// Telegram adalah SATU-SATUNYA kanal pengiriman. WhatsApp pernah dipakai lewat
+// WAHA (API tidak resmi) dan dihapus seluruhnya: nomornya berisiko dibatasi,
+// dan memang sempat terjadi.
 package notifworker
 
 import (
@@ -14,20 +20,26 @@ import (
 	"sim-madrasah/backend/internal/config"
 )
 
-// RunTelegram mengirim antrean notifikasi berkanal 'telegram' lewat Telegram Bot API.
+type pendingItem struct {
+	ID     int64
+	Tujuan string
+	Pesan  string
+}
+
+// RunTelegram memblokir selamanya (dipanggil lewat `go notifworker.RunTelegram(...)`).
+// Sengaja pakai loop sleep, bukan ticker: satu batch penuh diproses dulu (termasuk
+// jeda antar pesan) sebelum menunggu giliran berikutnya, sehingga tidak pernah ada
+// dua batch berjalan bersamaan.
 //
-// Berbeda dengan WhatsApp (WAHA), API ini RESMI: tidak ada sesi yang bisa tercabut,
-// tidak butuh nomor HP, dan tidak ada risiko nomor diblokir. Nonaktif otomatis bila
-// TELEGRAM_BOT_TOKEN kosong.
-//
-// Memakai saklar pengiriman yang sama dengan WhatsApp (notifikasi_wa_pengaturan),
-// sehingga satu tombol di halaman admin mengendalikan keduanya.
+// Saklar aktif/nonaktif (tabel notifikasi_pengaturan, diatur dari halaman admin)
+// dicek tiap putaran — bisa dimatikan/dinyalakan tanpa restart backend. Saat
+// nonaktif, pesan tetap diantrekan seperti biasa; worker cuma diam.
 func RunTelegram(db *sql.DB, cfg *config.Config) {
 	if cfg.TelegramBotToken == "" {
 		log.Println("telegram: TELEGRAM_BOT_TOKEN kosong -> pengirim Telegram tidak aktif")
 		return
 	}
-	interval := time.Duration(cfg.WahaPollSeconds) * time.Second
+	interval := time.Duration(cfg.NotifPollSeconds) * time.Second
 	if interval <= 0 {
 		interval = time.Minute
 	}
@@ -52,11 +64,22 @@ func RunTelegram(db *sql.DB, cfg *config.Config) {
 	}
 }
 
+// pengirimanAktif membaca saklar dari database. Bila baris/tabel belum ada
+// (mis. migrasi belum jalan), dianggap aktif — supaya deploy yang tertinggal
+// tidak diam-diam berhenti mengirim.
+func pengirimanAktif(db *sql.DB) bool {
+	var aktif bool
+	if err := db.QueryRow(`SELECT aktif FROM notifikasi_pengaturan WHERE id = 1`).Scan(&aktif); err != nil {
+		return true
+	}
+	return aktif
+}
+
 func prosesBatchTelegram(db *sql.DB, cfg *config.Config, client *http.Client) {
 	rows, err := db.Query(`
-		SELECT id, tujuan, pesan FROM notifikasi_wa
-		WHERE status = 'pending' AND kanal = 'telegram'
-		ORDER BY id LIMIT ?`, cfg.WahaBatchLimit)
+		SELECT id, tujuan, pesan FROM notifikasi
+		WHERE status = 'pending'
+		ORDER BY id LIMIT ?`, cfg.NotifBatchLimit)
 	if err != nil {
 		log.Printf("telegram: gagal ambil antrean: %v", err)
 		return
@@ -79,15 +102,36 @@ func prosesBatchTelegram(db *sql.DB, cfg *config.Config, client *http.Client) {
 			log.Printf("telegram: terkirim id=%d ke %s", it.ID, it.Tujuan)
 		}
 		if i < len(items)-1 {
-			time.Sleep(time.Duration(cfg.WahaSendDelaySeconds) * time.Second)
+			time.Sleep(time.Duration(cfg.NotifSendDelaySeconds) * time.Second)
 		}
 	}
 }
 
-// kirimTelegram mengirim satu pesan. Pesan kita memakai penanda gaya WhatsApp
-// (*tebal*, _miring_) yang kebetulan sama dengan Markdown Telegram. Bila Telegram
-// menolak karena ada karakter yang mengacaukan Markdown, dicoba ulang sebagai
-// teks biasa supaya pesan tetap sampai (isi lebih penting daripada gaya huruf).
+func tandaiTerkirim(db *sql.DB, id int64) {
+	if _, err := db.Exec(`
+		UPDATE notifikasi SET status='terkirim', dikirim_at=NOW(), percobaan=percobaan+1, catatan=NULL
+		WHERE id=?`, id); err != nil {
+		log.Printf("telegram: gagal menandai terkirim id=%d: %v", id, err)
+	}
+}
+
+func tandaiGagal(db *sql.DB, id int64, sebab error) {
+	catatan := sebab.Error()
+	if len(catatan) > 255 {
+		catatan = catatan[:255]
+	}
+	if _, err := db.Exec(`
+		UPDATE notifikasi SET status='gagal', percobaan=percobaan+1, catatan=?
+		WHERE id=?`, catatan, id); err != nil {
+		log.Printf("telegram: gagal menandai gagal id=%d: %v", id, err)
+	}
+}
+
+// kirimTelegram mengirim satu pesan. Pesan kita memakai penanda *tebal* / _miring_
+// yang kebetulan sama dengan Markdown Telegram. Bila Telegram menolak karena ada
+// karakter yang mengacaukan Markdown (mis. nama tabel bergaris bawah), dicoba
+// ulang sebagai teks biasa supaya pesan tetap sampai — isi lebih penting daripada
+// gaya huruf.
 func kirimTelegram(client *http.Client, cfg *config.Config, chatID, pesan string) error {
 	if chatID == "" {
 		return fmt.Errorf("chat_id Telegram belum diatur")
@@ -101,8 +145,8 @@ func kirimTelegram(client *http.Client, cfg *config.Config, chatID, pesan string
 }
 
 // galatPenguraian membedakan "Markdown-nya bermasalah" dari kegagalan lain
-// (mis. chat not found / bot diblokir). Hanya galat penguraian yang layak
-// dicoba ulang sebagai teks biasa — selain itu mengulang hanya membuang waktu.
+// (mis. chat not found / bot dikeluarkan dari grup). Hanya galat penguraian yang
+// layak dicoba ulang sebagai teks biasa — selain itu mengulang hanya membuang waktu.
 func galatPenguraian(err error) bool {
 	p := strings.ToLower(err.Error())
 	if !strings.Contains(p, "400") {

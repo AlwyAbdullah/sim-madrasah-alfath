@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"crypto/subtle"
 	"database/sql"
 	"encoding/json"
 	"net/http"
@@ -11,7 +10,6 @@ import (
 	"sim-madrasah/backend/internal/httpx"
 	"sim-madrasah/backend/internal/middleware"
 	"sim-madrasah/backend/internal/models"
-	"sim-madrasah/backend/internal/waid"
 )
 
 type loginReq struct {
@@ -83,68 +81,6 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 		MaxAge:   -1,
 	})
 	httpx.JSON(w, http.StatusOK, map[string]string{"message": "Berhasil logout"})
-}
-
-type botLoginReq struct {
-	BotSecret      string `json:"bot_secret"`
-	WhatsappNumber string `json:"whatsapp_number"`
-}
-
-// POST /auth/bot-login — dipakai n8n: tukar secret+nomor WhatsApp → JWT guru (di body).
-// PENTING: n8n harus meneruskan nilai "from" mentah dari WAHA apa adanya (mis.
-// "628...@c.us" atau "628...:12@c.us") — jangan menormalkan di sisi n8n. waid.Normalize
-// di bawah ini adalah SATU-SATUNYA tempat normalisasi nomor WhatsApp terjadi; menduplikasi
-// logika ini di n8n berisiko keduanya menyimpang (persis bug yang pernah ditemukan di sini).
-func (h *Handler) BotLogin(w http.ResponseWriter, r *http.Request) {
-	var req botLoginReq
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.WhatsappNumber == "" {
-		httpx.Error(w, http.StatusBadRequest, "BAD_REQUEST", "bot_secret dan whatsapp_number wajib")
-		return
-	}
-	secret := h.Cfg.BotSharedSecret
-	if secret == "" || subtle.ConstantTimeCompare([]byte(req.BotSecret), []byte(secret)) != 1 {
-		httpx.Error(w, http.StatusUnauthorized, "BOT_UNAUTHORIZED", "Secret bot tidak valid")
-		return
-	}
-
-	wa, err := waid.Normalize(req.WhatsappNumber)
-	if err != nil {
-		httpx.Error(w, http.StatusBadRequest, "BAD_REQUEST", "Format nomor WhatsApp tidak valid")
-		return
-	}
-
-	var (
-		id         int64
-		username   string
-		nama, role string
-		isActive   bool
-	)
-	err = h.DB.QueryRow(
-		`SELECT id, username, nama, role, is_active FROM users WHERE whatsapp_number = ?`,
-		wa,
-	).Scan(&id, &username, &nama, &role, &isActive)
-	if err == sql.ErrNoRows {
-		httpx.Error(w, http.StatusForbidden, "NOT_REGISTERED", "Nomor WhatsApp belum terdaftar")
-		return
-	}
-	if err != nil {
-		httpx.Error(w, http.StatusInternalServerError, "DB_ERROR", "Terjadi kesalahan server")
-		return
-	}
-	if !isActive {
-		httpx.Error(w, http.StatusForbidden, "USER_INACTIVE", "Akun dinonaktifkan")
-		return
-	}
-
-	token, err := auth.GenerateToken(h.Cfg.JWTSecret, h.Cfg.JWTExpiryMin, id, username, role)
-	if err != nil {
-		httpx.Error(w, http.StatusInternalServerError, "TOKEN_ERROR", "Gagal membuat sesi")
-		return
-	}
-	httpx.JSON(w, http.StatusOK, map[string]interface{}{
-		"token": token,
-		"user":  models.User{ID: id, Username: username, Nama: nama, Role: role},
-	})
 }
 
 func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {

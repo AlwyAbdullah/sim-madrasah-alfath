@@ -7,14 +7,12 @@
 > - **Log:** `journalctl -u sim-madrasah-backend -e` / `... -frontend -e`.
 > - **HTTPS:** ✅ aktif (Let's Encrypt, auto-renew via `certbot.timer`; kedaluwarsa 26 Okt 2026). `COOKIE_SECURE=true` & `CORS_ORIGIN=https://madrasah-alfath-malang.web.id` di `.env`.
 >   Perpanjangan otomatis; cek manual: `sudo certbot renew --dry-run`.
-> - **WAHA (WhatsApp bot notifikasi ortu):** terpasang via Docker di VPS ini sendiri, `devlikeapro/waha:noweb`
->   (compose di `/home/deploy/waha/`, kredensial di `/home/deploy/waha/.env`, perm 600).
->   Bind **hanya** ke `127.0.0.1:3001` (tidak publik) — backend memanggil langsung via worker bawaan
->   (`internal/notifworker`). RAM dibatasi 400 MB. Sesi WhatsApp sudah ter-pairing: `default`.
->   ⏸️ **Saat ini DIMATIKAN** (container `docker compose stop` + saklar nonaktif dari halaman
->   **Notifikasi WA**) — sesi tetap tersimpan, tidak perlu scan ulang. Nyalakan lagi:
->   `cd /home/deploy/waha && docker compose start` lalu toggle "Aktifkan" di halaman **Notifikasi WA**.
->   Detail & alternatif (n8n) di `docs/BOT-NOTIFIKASI-WA.md`.
+> - **Notifikasi — Telegram (satu-satunya kanal):** bot `@AlfathMalangBot`, token di
+>   `TELEGRAM_BOT_TOKEN` pada `.env` backend (perm 600). Tujuan chat/grup diatur dari halaman
+>   admin **Notifikasi**, tersimpan di tabel `telegram_pengaturan`. Pengingat yang berjalan:
+>   **absensi harian** dan **SPP bulanan**. Detail di `docs/NOTIFIKASI-TELEGRAM.md`.
+>   ❌ **WhatsApp/WAHA sudah dihapus seluruhnya** (container dibuang, kode & tabelnya dibersihkan
+>   lewat migrasi `018_hapus_whatsapp.sql`) — API-nya tidak resmi dan nomornya sempat dibatasi.
 > - **Backup database:** ✅ otomatis **tiap hari 02:00** via `sim-madrasah-backup.timer`
 >   → `/home/deploy/backups/`. Retensi: **30 hari** harian + backup tanggal 1 disimpan **1 tahun**.
 >   Skrip memverifikasi hasilnya (uji gzip, jumlah tabel, penanda "Dump completed") dan gagal
@@ -56,7 +54,7 @@ Langkah `mysqldump` di tengah membuat cadangan kondisi **sebelum** dipulihkan �
 kalau ternyata salah pilih berkas.
 
 **4. Bila server benar-benar hilang (bangun dari nol)**
-Selain `.sql.gz`, ada `config-*.tar.gz` berisi `.env` backend/frontend, konfigurasi WAHA,
+Selain `.sql.gz`, ada `config-*.tar.gz` berisi `.env` backend/frontend,
 nginx, dan unit systemd. Bongkar dengan `sudo tar xzf config-XXX.tar.gz -C /` setelah aplikasi
 dipasang ulang, lalu pulihkan database seperti langkah 3.
 

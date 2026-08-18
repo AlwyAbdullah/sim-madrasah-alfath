@@ -74,8 +74,6 @@ tar czf "$CFG" \
   --ignore-failed-read \
   home/deploy/sim-madrasah/backend/.env \
   home/deploy/sim-madrasah/frontend/.env.production \
-  home/deploy/waha/.env \
-  home/deploy/waha/docker-compose.yml \
   etc/nginx/sites-available/sim-madrasah \
   etc/systemd/system/sim-madrasah-backend.service \
   etc/systemd/system/sim-madrasah-frontend.service \

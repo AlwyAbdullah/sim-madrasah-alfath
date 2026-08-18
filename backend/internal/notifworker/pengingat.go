@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"sim-madrasah/backend/internal/handlers"
-	"sim-madrasah/backend/internal/waid"
 )
 
 const jenisPengingatAbsensi = "pengingat_absensi"
@@ -24,9 +23,10 @@ func tanggalIndonesia(t time.Time) string {
 // RunPengingatAbsensi memeriksa tiap menit apakah sudah waktunya mengirim
 // pengingat "masih ada kelas yang belum diabsen".
 //
-// Sengaja TIDAK bergantung pada WAHA: pesan hanya diantrekan ke tabel
-// notifikasi_wa. Bila WAHA sedang mati, pengingat tetap tercatat dan terlihat di
-// halaman Notifikasi WA, lalu terkirim sendiri begitu WAHA dinyalakan.
+// Sengaja TIDAK memanggil Telegram langsung: pesan hanya diantrekan ke tabel
+// `notifikasi`. Bila pengiriman sedang dijeda dari halaman admin, pengingat tetap
+// tercatat dan terlihat di halaman Notifikasi, lalu terkirim sendiri begitu
+// pengiriman diaktifkan lagi.
 func RunPengingatAbsensi(db *sql.DB) {
 	log.Println("pengingat-absensi: aktif — memeriksa tiap menit")
 	for {
@@ -93,71 +93,41 @@ func periksaDanKirim(db *sql.DB, now time.Time) error {
 
 	pesan := susunPesan(now, belum, sebagian, lengkap)
 
-	// Utamakan Telegram (API resmi, tanpa risiko blokir). Bila chat Telegram belum
-	// diatur, jatuh kembali ke WhatsApp memakai nomor admin.
-	kanal, tujuan := tujuanPengingat(db)
-	if len(tujuan) == 0 {
-		// tetap tandai supaya tidak berulang; tapi catat agar admin tahu
+	tujuan := chatTujuan(db)
+	if tujuan == "" {
+		// tetap tandai supaya tidak diperiksa berulang; catat agar admin tahu
 		tandaiPengingatTerkirim(db, hariIni)
-		log.Printf("pengingat-absensi: belum ada tujuan (chat Telegram / nomor WA admin) — pengingat dilewati")
+		log.Printf("pengingat-absensi: tujuan chat Telegram belum diatur — pengingat dilewati")
 		return nil
 	}
 
-	for _, t := range tujuan {
-		if _, err := db.Exec(`
-			INSERT INTO notifikasi_wa (santri_id, jenis, kanal, ref_tanggal, tujuan, pesan, status)
-			VALUES (NULL, ?, ?, ?, ?, ?, 'pending')`,
-			jenisPengingatAbsensi, kanal, hariIni, t, pesan); err != nil {
-			return fmt.Errorf("gagal mengantrekan pengingat: %w", err)
-		}
+	if _, err := db.Exec(`
+		INSERT INTO notifikasi (santri_id, jenis, ref_tanggal, tujuan, pesan, status)
+		VALUES (NULL, ?, ?, ?, ?, 'pending')`,
+		jenisPengingatAbsensi, hariIni, tujuan, pesan); err != nil {
+		return fmt.Errorf("gagal mengantrekan pengingat: %w", err)
 	}
 	tandaiPengingatTerkirim(db, hariIni)
-	log.Printf("pengingat-absensi: %s diantrekan lewat %s ke %d tujuan (%d kelas belum, %d sebagian)",
-		hariIni, kanal, len(tujuan), len(belum), len(sebagian))
+	log.Printf("pengingat-absensi: %s diantrekan ke %s (%d kelas belum, %d sebagian)",
+		hariIni, tujuan, len(belum), len(sebagian))
 	return nil
 }
 
-// tujuanPengingat memilih kanal & daftar tujuan pengiriman.
-func tujuanPengingat(db *sql.DB) (string, []string) {
+// chatTujuan mengambil tujuan pengiriman Telegram. Kosong = belum diatur admin.
+// Dipakai bersama oleh pengingat absensi dan pengingat SPP.
+func chatTujuan(db *sql.DB) string {
 	var chatID sql.NullString
 	_ = db.QueryRow(`SELECT chat_id FROM telegram_pengaturan WHERE id = 1`).Scan(&chatID)
-	if chatID.Valid && strings.TrimSpace(chatID.String) != "" {
-		return "telegram", []string{strings.TrimSpace(chatID.String)}
+	if !chatID.Valid {
+		return ""
 	}
-	nomor, err := nomorAdmin(db)
-	if err != nil {
-		return "whatsapp", nil
-	}
-	return "whatsapp", nomor
+	return strings.TrimSpace(chatID.String)
 }
 
 func tandaiPengingatTerkirim(db *sql.DB, tanggal string) {
 	if _, err := db.Exec(`UPDATE pengingat_absensi_pengaturan SET terakhir_kirim = ? WHERE id = 1`, tanggal); err != nil {
 		log.Printf("pengingat-absensi: gagal menandai terkirim: %v", err)
 	}
-}
-
-// nomorAdmin mengambil nomor WhatsApp seluruh admin aktif yang sudah mengisinya.
-func nomorAdmin(db *sql.DB) ([]string, error) {
-	rows, err := db.Query(`
-		SELECT whatsapp_number FROM users
-		WHERE role = 'admin' AND is_active = 1
-		  AND whatsapp_number IS NOT NULL AND whatsapp_number <> ''`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	out := []string{}
-	for rows.Next() {
-		var no string
-		if err := rows.Scan(&no); err != nil {
-			continue
-		}
-		if wa, err := waid.Normalize(no); err == nil {
-			out = append(out, wa)
-		}
-	}
-	return out, rows.Err()
 }
 
 func susunPesan(now time.Time, belum, sebagian []handlers.StatusKelasAbsensi, lengkap int) string {

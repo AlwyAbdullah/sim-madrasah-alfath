@@ -27,13 +27,12 @@ func main() {
 
 	h := handlers.New(conn, cfg)
 
-	// Worker pengirim notifikasi WhatsApp (nonaktif otomatis bila WAHA_URL kosong).
-	go notifworker.Run(conn, cfg)
-	// Pengirim Telegram (API resmi — tanpa risiko blokir nomor).
+	// Pengirim notifikasi — Telegram (API resmi, satu-satunya kanal).
 	go notifworker.RunTelegram(conn, cfg)
-	// Pengingat harian bila masih ada kelas yang belum diabsen (tidak butuh WAHA:
-	// pesan diantrekan, terkirim sendiri saat WAHA menyala).
+	// Pengingat harian bila masih ada kelas yang belum diabsen.
 	go notifworker.RunPengingatAbsensi(conn)
+	// Pengingat bulanan daftar santri yang belum membayar SPP.
+	go notifworker.RunPengingatSPP(conn)
 
 	r := chi.NewRouter()
 	r.Use(chimw.Logger)
@@ -56,11 +55,6 @@ func main() {
 			r.Post("/auth/login", h.Login)
 		})
 		r.Post("/auth/logout", h.Logout)
-		r.Post("/auth/bot-login", h.BotLogin)
-
-		// Antrean notifikasi WhatsApp — diakses bot memakai X-Bot-Secret.
-		r.Get("/notifikasi/pending", h.NotifPending)
-		r.Post("/notifikasi/status", h.NotifStatus)
 
 		// Terproteksi (semua guru bisa akses semua kelas — tanpa batasan kelas ampu)
 		r.Group(func(r chi.Router) {
@@ -155,13 +149,18 @@ func main() {
 				r.Put("/guru/{id}", h.UpdateGuru)
 				r.Delete("/guru/{id}", h.DeleteGuru)
 
-				// Notifikasi WhatsApp (pantau & kelola antrean)
+				// Notifikasi (pantau & kelola antrean)
 				r.Get("/notifikasi", h.ListNotifikasi)
 				r.Post("/notifikasi/{id}/ulang", h.UlangNotifikasi)
 				r.Post("/notifikasi/{id}/batal", h.BatalNotifikasi)
 				r.Get("/notifikasi/pengaturan", h.GetPengaturanNotifikasi)
 				r.Post("/notifikasi/pengaturan", h.SetPengaturanNotifikasi)
 				r.Post("/pengingat-absensi", h.SetPengingatAbsensi)
+
+				// Pengingat SPP bulanan (daftar santri yang belum bayar)
+				r.Get("/pengingat-spp", h.GetPengingatSPP)
+				r.Post("/pengingat-spp", h.SetPengingatSPP)
+				r.Post("/pengingat-spp/kirim", h.KirimPengingatSPP)
 
 				// Telegram (kanal notifikasi resmi)
 				r.Get("/telegram/pengaturan", h.GetPengaturanTelegram)

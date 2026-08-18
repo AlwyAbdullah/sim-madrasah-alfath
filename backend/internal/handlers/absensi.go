@@ -102,17 +102,6 @@ func (h *Handler) SaveAbsensi(w http.ResponseWriter, r *http.Request) {
 			httpx.Error(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 			return
 		}
-		// Notifikasi WhatsApp ke orang tua: hanya untuk ALPHA.
-		// Bila status dikoreksi menjadi bukan alpha, antrean yang belum terkirim dibatalkan.
-		if it.Status == "alpha" {
-			if err := antreNotifAlpha(tx, it.SantriID, batch.Tanggal); err != nil {
-				httpx.Error(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
-				return
-			}
-		} else if err := batalkanNotifAlpha(tx, it.SantriID, batch.Tanggal); err != nil {
-			httpx.Error(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
-			return
-		}
 		saved++
 	}
 	if err := tx.Commit(); err != nil {

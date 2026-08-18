@@ -1,180 +1,17 @@
 package handlers
 
 import (
-	"crypto/subtle"
 	"database/sql"
-	"encoding/json"
-	"fmt"
 	"net/http"
 	"strconv"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 
 	"sim-madrasah/backend/internal/httpx"
-	"sim-madrasah/backend/internal/waid"
 )
 
-const jenisAbsensiAlpha = "absensi_alpha"
-
-var hariIndo = []string{"Ahad", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"}
 var bulanIndo = []string{"Januari", "Februari", "Maret", "April", "Mei", "Juni",
 	"Juli", "Agustus", "September", "Oktober", "November", "Desember"}
-
-func tanggalIndonesia(t time.Time) string {
-	return fmt.Sprintf("%s, %d %s %d", hariIndo[int(t.Weekday())], t.Day(), bulanIndo[int(t.Month())-1], t.Year())
-}
-
-// pesanAlpha menyusun teks WhatsApp untuk orang tua.
-func pesanAlpha(nama, kelas string, tgl time.Time) string {
-	return fmt.Sprintf(
-		"Assalamu'alaikum warahmatullahi wabarakatuh.\n\n"+
-			"Kami informasikan bahwa ananda *%s* (%s) tercatat *TIDAK HADIR tanpa keterangan (Alpha)* pada %s.\n\n"+
-			"Mohon konfirmasi dari Bapak/Ibu. Jazakumullahu khairan.\n\n"+
-			"_Madrasah Al Fath_",
-		nama, kelas, tanggalIndonesia(tgl))
-}
-
-// antreNotifAlpha mengantrikan pesan alpha untuk satu santri (dipanggil di dalam
-// transaksi penyimpanan absensi). Dilewati diam-diam bila nomor orang tua kosong
-// atau tidak valid — absensi tetap tersimpan.
-func antreNotifAlpha(tx *sql.Tx, santriID int64, tanggal string) error {
-	var nama, kelas string
-	var noOrtu sql.NullString
-	err := tx.QueryRow(`
-		SELECT s.nama, k.nama, s.no_ortu
-		FROM santri s JOIN kelas k ON k.id = s.kelas_id
-		WHERE s.id = ?`, santriID).Scan(&nama, &kelas, &noOrtu)
-	if err != nil {
-		return nil // santri tak ditemukan → jangan gagalkan penyimpanan absensi
-	}
-	if !noOrtu.Valid || noOrtu.String == "" {
-		return nil // belum ada nomor orang tua
-	}
-	tujuan, err := waid.Normalize(noOrtu.String)
-	if err != nil {
-		return nil // format nomor tidak valid → lewati
-	}
-	tgl, err := time.Parse("2006-01-02", tanggal)
-	if err != nil {
-		return nil
-	}
-
-	// Bila sudah pernah TERKIRIM untuk tanggal itu, jangan diubah jadi pending lagi.
-	_, err = tx.Exec(`
-		INSERT INTO notifikasi_wa (santri_id, jenis, ref_tanggal, tujuan, pesan, status)
-		VALUES (?, ?, ?, ?, ?, 'pending')
-		ON DUPLICATE KEY UPDATE
-			tujuan = VALUES(tujuan),
-			pesan  = VALUES(pesan),
-			status = IF(status = 'terkirim', 'terkirim', 'pending')`,
-		santriID, jenisAbsensiAlpha, tanggal, tujuan, pesanAlpha(nama, kelas, tgl))
-	return err
-}
-
-// batalkanNotifAlpha membatalkan antrean yang belum terkirim ketika status
-// absensi dikoreksi menjadi bukan alpha (mis. guru salah tandai).
-func batalkanNotifAlpha(tx *sql.Tx, santriID int64, tanggal string) error {
-	_, err := tx.Exec(`
-		UPDATE notifikasi_wa SET status = 'batal'
-		WHERE santri_id = ? AND jenis = ? AND ref_tanggal = ? AND status = 'pending'`,
-		santriID, jenisAbsensiAlpha, tanggal)
-	return err
-}
-
-// ================= ENDPOINT UNTUK BOT =================
-
-func (h *Handler) botAuthorized(r *http.Request) bool {
-	secret := h.Cfg.BotSharedSecret
-	if secret == "" {
-		return false
-	}
-	kirim := r.Header.Get("X-Bot-Secret")
-	if kirim == "" {
-		kirim = r.URL.Query().Get("bot_secret")
-	}
-	return subtle.ConstantTimeCompare([]byte(kirim), []byte(secret)) == 1
-}
-
-type notifKeluar struct {
-	ID     int64  `json:"id"`
-	Tujuan string `json:"tujuan"`
-	Pesan  string `json:"pesan"`
-	Jenis  string `json:"jenis"`
-}
-
-// GET /notifikasi/pending?limit=  (auth: X-Bot-Secret)
-// Dipakai bot WhatsApp untuk mengambil pesan yang perlu dikirim.
-func (h *Handler) NotifPending(w http.ResponseWriter, r *http.Request) {
-	if !h.botAuthorized(r) {
-		httpx.Error(w, http.StatusUnauthorized, "BOT_UNAUTHORIZED", "Secret bot tidak valid")
-		return
-	}
-	limit := 20
-	if l := r.URL.Query().Get("limit"); l != "" {
-		if n, err := strconv.Atoi(l); err == nil && n > 0 && n <= 100 {
-			limit = n
-		}
-	}
-	rows, err := h.DB.Query(`
-		SELECT id, tujuan, pesan, jenis FROM notifikasi_wa
-		WHERE status = 'pending' ORDER BY id LIMIT ?`, limit)
-	if err != nil {
-		dbErr(w, err)
-		return
-	}
-	defer rows.Close()
-	out := []notifKeluar{}
-	for rows.Next() {
-		var n notifKeluar
-		_ = rows.Scan(&n.ID, &n.Tujuan, &n.Pesan, &n.Jenis)
-		out = append(out, n)
-	}
-	httpx.JSON(w, http.StatusOK, map[string]interface{}{"items": out})
-}
-
-type notifStatusReq struct {
-	ID      int64  `json:"id"`
-	Sukses  bool   `json:"sukses"`
-	Catatan string `json:"catatan"`
-}
-
-// POST /notifikasi/status  (auth: X-Bot-Secret)
-// Bot melapor hasil pengiriman satu pesan.
-func (h *Handler) NotifStatus(w http.ResponseWriter, r *http.Request) {
-	if !h.botAuthorized(r) {
-		httpx.Error(w, http.StatusUnauthorized, "BOT_UNAUTHORIZED", "Secret bot tidak valid")
-		return
-	}
-	var req notifStatusReq
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.ID == 0 {
-		httpx.Error(w, http.StatusBadRequest, "BAD_REQUEST", "id wajib")
-		return
-	}
-	var err error
-	if req.Sukses {
-		_, err = h.DB.Exec(`
-			UPDATE notifikasi_wa
-			   SET status='terkirim', dikirim_at=NOW(), percobaan=percobaan+1, catatan=NULL
-			 WHERE id=?`, req.ID)
-	} else {
-		catatan := req.Catatan
-		if len(catatan) > 255 {
-			catatan = catatan[:255]
-		}
-		_, err = h.DB.Exec(`
-			UPDATE notifikasi_wa
-			   SET status='gagal', percobaan=percobaan+1, catatan=?
-			 WHERE id=?`, catatan, req.ID)
-	}
-	if err != nil {
-		dbErr(w, err)
-		return
-	}
-	httpx.JSON(w, http.StatusOK, map[string]string{"message": "ok"})
-}
-
-// ================= ENDPOINT ADMIN =================
 
 // GET /notifikasi?status=&limit=
 func (h *Handler) ListNotifikasi(w http.ResponseWriter, r *http.Request) {
@@ -185,9 +22,9 @@ func (h *Handler) ListNotifikasi(w http.ResponseWriter, r *http.Request) {
 			limit = n
 		}
 	}
-	q := `SELECT n.id, COALESCE(s.nama,'-'), n.jenis, n.kanal, n.ref_tanggal, n.tujuan, n.pesan,
+	q := `SELECT n.id, COALESCE(s.nama,'-'), n.jenis, n.ref_tanggal, n.tujuan, n.pesan,
 	             n.status, n.percobaan, n.catatan, n.dikirim_at, n.created_at
-	      FROM notifikasi_wa n LEFT JOIN santri s ON s.id = n.santri_id`
+	      FROM notifikasi n LEFT JOIN santri s ON s.id = n.santri_id`
 	args := []interface{}{}
 	if status != "" {
 		q += ` WHERE n.status = ?`
@@ -207,7 +44,6 @@ func (h *Handler) ListNotifikasi(w http.ResponseWriter, r *http.Request) {
 		ID         int64   `json:"id"`
 		Nama       string  `json:"nama"`
 		Jenis      string  `json:"jenis"`
-		Kanal      string  `json:"kanal"`
 		RefTanggal *string `json:"ref_tanggal"`
 		Tujuan     string  `json:"tujuan"`
 		Pesan      string  `json:"pesan"`
@@ -222,7 +58,7 @@ func (h *Handler) ListNotifikasi(w http.ResponseWriter, r *http.Request) {
 		var it item
 		var ref, kirim sql.NullString
 		var created string
-		_ = rows.Scan(&it.ID, &it.Nama, &it.Jenis, &it.Kanal, &ref, &it.Tujuan, &it.Pesan,
+		_ = rows.Scan(&it.ID, &it.Nama, &it.Jenis, &ref, &it.Tujuan, &it.Pesan,
 			&it.Status, &it.Percobaan, &it.Catatan, &kirim, &created)
 		if ref.Valid {
 			t := ref.String
@@ -240,7 +76,7 @@ func (h *Handler) ListNotifikasi(w http.ResponseWriter, r *http.Request) {
 
 	// ringkasan jumlah per status
 	ringkas := map[string]int{}
-	srows, err := h.DB.Query(`SELECT status, COUNT(*) FROM notifikasi_wa GROUP BY status`)
+	srows, err := h.DB.Query(`SELECT status, COUNT(*) FROM notifikasi GROUP BY status`)
 	if err == nil {
 		for srows.Next() {
 			var s string
@@ -256,7 +92,7 @@ func (h *Handler) ListNotifikasi(w http.ResponseWriter, r *http.Request) {
 // POST /notifikasi/{id}/ulang — kembalikan ke antrean (untuk yang gagal/batal).
 func (h *Handler) UlangNotifikasi(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	if _, err := h.DB.Exec(`UPDATE notifikasi_wa SET status='pending', catatan=NULL WHERE id=?`, id); err != nil {
+	if _, err := h.DB.Exec(`UPDATE notifikasi SET status='pending', catatan=NULL WHERE id=?`, id); err != nil {
 		dbErr(w, err)
 		return
 	}
@@ -266,18 +102,18 @@ func (h *Handler) UlangNotifikasi(w http.ResponseWriter, r *http.Request) {
 // POST /notifikasi/{id}/batal — batalkan pesan yang belum terkirim.
 func (h *Handler) BatalNotifikasi(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	if _, err := h.DB.Exec(`UPDATE notifikasi_wa SET status='batal' WHERE id=? AND status <> 'terkirim'`, id); err != nil {
+	if _, err := h.DB.Exec(`UPDATE notifikasi SET status='batal' WHERE id=? AND status <> 'terkirim'`, id); err != nil {
 		dbErr(w, err)
 		return
 	}
 	httpx.JSON(w, http.StatusOK, map[string]string{"message": "ok"})
 }
 
-// GET /notifikasi/pengaturan — status aktif/nonaktif worker pengirim WA.
+// GET /notifikasi/pengaturan — status aktif/nonaktif worker pengirim.
 func (h *Handler) GetPengaturanNotifikasi(w http.ResponseWriter, r *http.Request) {
 	var aktif bool
-	if err := h.DB.QueryRow(`SELECT aktif FROM notifikasi_wa_pengaturan WHERE id = 1`).Scan(&aktif); err != nil {
-		aktif = true // baris belum ada (mis. sebelum migrasi 014) -> anggap aktif, sesuai perilaku lama
+	if err := h.DB.QueryRow(`SELECT aktif FROM notifikasi_pengaturan WHERE id = 1`).Scan(&aktif); err != nil {
+		aktif = true // baris belum ada (migrasi tertinggal) -> anggap aktif
 	}
 	httpx.JSON(w, http.StatusOK, map[string]interface{}{"aktif": aktif})
 }
@@ -286,16 +122,16 @@ type pengaturanNotifReq struct {
 	Aktif bool `json:"aktif"`
 }
 
-// POST /notifikasi/pengaturan — nyalakan/matikan pengiriman WA.
-// Saat nonaktif, pesan tetap diantrekan seperti biasa (fitur absensi tak terpengaruh);
-// worker (internal/notifworker) hanya berhenti memanggil WAHA sampai diaktifkan lagi.
+// POST /notifikasi/pengaturan — nyalakan/matikan pengiriman.
+// Saat nonaktif, pesan tetap diantrekan seperti biasa; worker (internal/notifworker)
+// hanya berhenti memanggil Telegram sampai diaktifkan lagi.
 func (h *Handler) SetPengaturanNotifikasi(w http.ResponseWriter, r *http.Request) {
 	var req pengaturanNotifReq
 	if !decode(w, r, &req) {
 		return
 	}
 	if _, err := h.DB.Exec(`
-		INSERT INTO notifikasi_wa_pengaturan (id, aktif) VALUES (1, ?)
+		INSERT INTO notifikasi_pengaturan (id, aktif) VALUES (1, ?)
 		ON DUPLICATE KEY UPDATE aktif = VALUES(aktif)`, req.Aktif); err != nil {
 		dbErr(w, err)
 		return

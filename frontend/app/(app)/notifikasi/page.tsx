@@ -7,7 +7,6 @@ type Item = {
   id: number;
   nama: string;
   jenis: string;
-  kanal: string;
   ref_tanggal: string | null;
   tujuan: string;
   pesan: string;
@@ -18,12 +17,33 @@ type Item = {
   created_at: string;
 };
 
+type TunggakanKelas = { kelas_id: number; kelas: string; total: number; belum: string[] };
+type RekapSPP = {
+  tahun: number;
+  bulan: number;
+  nama_bulan: string;
+  total_santri: number;
+  lunas: number;
+  belum: number;
+  kelas: TunggakanKelas[];
+};
+type PengaturanSPP = { aktif: boolean; tanggal: number; jam: number; menit: number };
+
 const WARNA: Record<string, string> = {
   pending: "sakit",     // kuning
   terkirim: "hadir",    // hijau
   gagal: "alpha",       // merah
   batal: "izin",        // biru
 };
+
+const JENIS_LABEL: Record<string, string> = {
+  pengingat_absensi: "Pengingat absensi",
+  pengingat_spp: "Pengingat SPP",
+};
+
+function jam2(j: number, m: number) {
+  return `${String(j).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
 
 export default function NotifikasiPage() {
   const [items, setItems] = useState<Item[]>([]);
@@ -39,6 +59,12 @@ export default function NotifikasiPage() {
   const [ping, setPing] = useState<{ aktif: boolean; jam: number; menit: number } | null>(null);
   const [simpanPing, setSimpanPing] = useState(false);
 
+  // pengaturan + rekap pengingat SPP bulanan
+  const [spp, setSpp] = useState<PengaturanSPP | null>(null);
+  const [rekap, setRekap] = useState<RekapSPP | null>(null);
+  const [sppSibuk, setSppSibuk] = useState(false);
+  const [rinci, setRinci] = useState(false);
+
   // pengaturan Telegram
   const [tg, setTg] = useState<{ token_terpasang: boolean; chat_id: string } | null>(null);
   const [tgChat, setTgChat] = useState("");
@@ -50,12 +76,19 @@ export default function NotifikasiPage() {
     setRingkasan(d.ringkasan || {});
   }, [status]);
 
+  const loadSPP = useCallback(async () => {
+    const d = await api("/pengingat-spp");
+    setSpp(d.pengaturan);
+    setRekap(d.rekap);
+  }, []);
+
   useEffect(() => { load().catch((e) => setMsg(e.message)); }, [load]);
   useEffect(() => {
     api("/notifikasi/pengaturan").then((d) => setAktif(!!d.aktif)).catch(() => {});
     api("/pengingat-absensi").then((d) => setPing(d.pengaturan)).catch(() => {});
     api("/telegram/pengaturan").then((d) => { setTg(d); setTgChat(d.chat_id || ""); }).catch(() => {});
-  }, []);
+    loadSPP().catch(() => {});
+  }, [loadSPP]);
 
   async function simpanTelegram() {
     setTgSibuk(true);
@@ -82,20 +115,46 @@ export default function NotifikasiPage() {
       const d = await api("/pengingat-absensi", { method: "POST", body: baru });
       setPing(d);
       setMsg(d.aktif
-        ? `Pengingat absensi aktif setiap pukul ${String(d.jam).padStart(2, "0")}.${String(d.menit).padStart(2, "0")}.`
+        ? `Pengingat absensi aktif setiap pukul ${jam2(d.jam, d.menit)}.`
         : "Pengingat absensi dimatikan.");
     } catch (e: any) { setMsg(e.message); }
     finally { setSimpanPing(false); }
   }
 
+  async function simpanPengingatSPP(baru: PengaturanSPP) {
+    setSppSibuk(true);
+    try {
+      const d = await api("/pengingat-spp", { method: "POST", body: baru });
+      setSpp(d);
+      setMsg(d.aktif
+        ? `Pengingat SPP aktif setiap tanggal ${d.tanggal} pukul ${jam2(d.jam, d.menit)}.`
+        : "Pengingat SPP dimatikan.");
+    } catch (e: any) { setMsg(e.message); }
+    finally { setSppSibuk(false); }
+  }
+
+  async function kirimSPPSekarang() {
+    if (!confirm(
+      `Kirim rekap tunggakan SPP ${rekap?.nama_bulan} ${rekap?.tahun} ke Telegram sekarang?\n\n` +
+      `${rekap?.belum} dari ${rekap?.total_santri} santri belum membayar.`
+    )) return;
+    setSppSibuk(true);
+    try {
+      const d = await api("/pengingat-spp/kirim", { method: "POST" });
+      setMsg("✅ " + d.message);
+      await load();
+    } catch (e: any) { setMsg("❌ " + e.message); }
+    finally { setSppSibuk(false); }
+  }
+
   async function toggleAktif() {
     const nilaiBaru = !aktif;
-    if (!nilaiBaru && !confirm("Matikan pengiriman WhatsApp otomatis?\n\nPesan tetap tercatat di antrean seperti biasa, hanya saja tidak akan dikirim sampai diaktifkan kembali.")) return;
+    if (!nilaiBaru && !confirm("Matikan pengiriman Telegram otomatis?\n\nPesan tetap tercatat di antrean seperti biasa, hanya saja tidak akan dikirim sampai diaktifkan kembali.")) return;
     setMengubah(true);
     try {
       const d = await api("/notifikasi/pengaturan", { method: "POST", body: { aktif: nilaiBaru } });
       setAktif(!!d.aktif);
-      setMsg(d.aktif ? "Pengiriman WhatsApp diaktifkan." : "Pengiriman WhatsApp dimatikan — pesan baru tetap mengantre.");
+      setMsg(d.aktif ? "Pengiriman Telegram diaktifkan." : "Pengiriman Telegram dimatikan — pesan baru tetap mengantre.");
     } catch (e: any) {
       setMsg(e.message);
     } finally {
@@ -111,25 +170,26 @@ export default function NotifikasiPage() {
     } catch (e: any) { setMsg(e.message); }
   }
 
+  const kelasBelum = (rekap?.kelas || []).filter((k) => k.belum.length > 0);
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-      <h1 style={{ margin: 0 }}>Notifikasi WhatsApp</h1>
+      <h1 style={{ margin: 0 }}>Notifikasi</h1>
       <p className="muted" style={{ margin: 0, fontSize: 13 }}>
-        Pesan otomatis ke orang tua saat santri <strong>alpha</strong>. Backend menyusun antrean di sini,
-        lalu bot WhatsApp mengambil &amp; mengirimnya. Jika status absensi dikoreksi menjadi bukan alpha,
-        pesan yang belum terkirim otomatis dibatalkan.
+        Pengingat otomatis dikirim ke <strong>Telegram</strong> lewat bot madrasah. Backend menyusun
+        antrean di sini, lalu worker mengirimnya — jadi pesan tidak hilang walau pengiriman sedang dijeda.
       </p>
 
       <div className="card" style={{ padding: 14, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
         <div>
-          <strong>Pengiriman WhatsApp otomatis: </strong>
+          <strong>Pengiriman otomatis: </strong>
           {aktif === null ? (
             <span className="muted">memuat…</span>
           ) : (
             <span className={`badge ${aktif ? "hadir" : "alpha"}`}>{aktif ? "Aktif" : "Nonaktif"}</span>
           )}
           <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
-            Saat nonaktif, pesan alpha tetap tercatat di antrean seperti biasa — hanya tidak dikirim sampai diaktifkan lagi.
+            Saat nonaktif, pesan tetap tercatat di antrean seperti biasa — hanya tidak dikirim sampai diaktifkan lagi.
           </div>
         </div>
         <button
@@ -142,18 +202,18 @@ export default function NotifikasiPage() {
         </button>
       </div>
 
-      {/* ===== kanal Telegram ===== */}
+      {/* ===== tujuan Telegram ===== */}
       <div className="card" style={{ padding: 14 }}>
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
           <div style={{ minWidth: 260, flex: 1 }}>
-            <strong>✈️ Telegram (kanal resmi): </strong>
+            <strong>✈️ Tujuan Telegram: </strong>
             {tg === null ? <span className="muted">memuat…</span>
               : !tg.token_terpasang ? <span className="badge alpha">Token belum dipasang</span>
               : tg.chat_id ? <span className="badge hadir">Siap</span>
               : <span className="badge sakit">Tujuan chat belum diisi</span>}
             <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
               API resmi Telegram — gratis, tanpa nomor HP, tanpa risiko nomor diblokir.
-              Pengingat absensi dikirim ke sini bila tujuan chat sudah diisi.
+              Semua pengingat dikirim ke chat/grup ini.
             </div>
             {tg && !tg.token_terpasang && (
               <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
@@ -182,7 +242,7 @@ export default function NotifikasiPage() {
             {ping === null ? <span className="muted">memuat…</span>
               : <span className={`badge ${ping.aktif ? "hadir" : "alpha"}`}>{ping.aktif ? "Aktif" : "Nonaktif"}</span>}
             <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
-              Bila masih ada kelas yang belum diabsen, pengingat dikirim ke WhatsApp admin.
+              Bila masih ada kelas yang belum diabsen, pengingat dikirim ke Telegram.
               Otomatis dilewati pada Kamis, Jumat, dan hari libur.
             </div>
           </div>
@@ -190,7 +250,7 @@ export default function NotifikasiPage() {
             <div className="row" style={{ gap: 8 }}>
               <span className="muted" style={{ fontSize: 13 }}>Jam</span>
               <input className="input" type="time" style={{ width: 130 }}
-                value={`${String(ping.jam).padStart(2, "0")}:${String(ping.menit).padStart(2, "0")}`}
+                value={jam2(ping.jam, ping.menit)}
                 onChange={(e) => {
                   const [j, m] = e.target.value.split(":").map(Number);
                   if (!isNaN(j) && !isNaN(m)) setPing({ ...ping, jam: j, menit: m });
@@ -202,6 +262,77 @@ export default function NotifikasiPage() {
                 onClick={() => simpanPengingat({ ...ping, aktif: !ping.aktif })}>
                 {ping.aktif ? "🔕 Matikan" : "🔔 Aktifkan"}
               </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ===== pengingat SPP bulanan ===== */}
+      <div className="card" style={{ padding: 14 }}>
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+          <div style={{ minWidth: 280, flex: 1 }}>
+            <strong>💰 Pengingat SPP bulanan: </strong>
+            {spp === null ? <span className="muted">memuat…</span>
+              : <span className={`badge ${spp.aktif ? "hadir" : "alpha"}`}>{spp.aktif ? "Aktif" : "Nonaktif"}</span>}
+            <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
+              Sekali sebulan, daftar santri yang <strong>belum membayar SPP bulan berjalan</strong> dikirim ke Telegram.
+              Santri yang belum punya catatan pembayaran sama sekali ikut terhitung belum bayar.
+            </div>
+            {rekap && (
+              <div style={{ marginTop: 8 }}>
+                <span className="badge alpha">Belum bayar {rekap.belum}</span>{" "}
+                <span className="badge hadir">Lunas {rekap.lunas}</span>{" "}
+                <span className="muted" style={{ fontSize: 12 }}>
+                  dari {rekap.total_santri} santri · {rekap.nama_bulan} {rekap.tahun}
+                </span>
+                {kelasBelum.length > 0 && (
+                  <button className="btn secondary" style={{ padding: "2px 8px", marginLeft: 8, fontSize: 12 }}
+                    onClick={() => setRinci((v) => !v)}>
+                    {rinci ? "Sembunyikan rincian" : "Lihat rincian"}
+                  </button>
+                )}
+              </div>
+            )}
+            {rinci && kelasBelum.length > 0 && (
+              <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 8 }}>
+                {kelasBelum.map((k) => (
+                  <div key={k.kelas_id} style={{ fontSize: 13 }}>
+                    <strong>{k.kelas}</strong>{" "}
+                    <span className="muted">— {k.belum.length} dari {k.total} belum bayar</span>
+                    <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>{k.belum.join(" · ")}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          {spp && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-end" }}>
+              <div className="row" style={{ gap: 8, alignItems: "center" }}>
+                <span className="muted" style={{ fontSize: 13 }}>Tiap tanggal</span>
+                <input className="input" type="number" min={1} max={28} style={{ width: 70 }}
+                  value={spp.tanggal}
+                  onChange={(e) => setSpp({ ...spp, tanggal: Number(e.target.value) })} />
+                <input className="input" type="time" style={{ width: 130 }}
+                  value={jam2(spp.jam, spp.menit)}
+                  onChange={(e) => {
+                    const [j, m] = e.target.value.split(":").map(Number);
+                    if (!isNaN(j) && !isNaN(m)) setSpp({ ...spp, jam: j, menit: m });
+                  }} />
+              </div>
+              <div className="row" style={{ gap: 8 }}>
+                <button className="btn secondary" disabled={sppSibuk}
+                  onClick={() => simpanPengingatSPP(spp)}>Simpan jadwal</button>
+                <button className={spp.aktif ? "btn secondary" : "btn"} disabled={sppSibuk}
+                  style={spp.aktif ? { color: "var(--danger)" } : undefined}
+                  onClick={() => simpanPengingatSPP({ ...spp, aktif: !spp.aktif })}>
+                  {spp.aktif ? "🔕 Matikan" : "🔔 Aktifkan"}
+                </button>
+                <button className="btn" disabled={sppSibuk || !rekap || rekap.belum === 0 || !tg?.chat_id}
+                  onClick={kirimSPPSekarang}>Kirim sekarang</button>
+              </div>
+              <div className="muted" style={{ fontSize: 11 }}>
+                Tanggal 1–28 agar selalu ada di setiap bulan.
+              </div>
             </div>
           )}
         </div>
@@ -225,16 +356,15 @@ export default function NotifikasiPage() {
       {msg && <div className="card" style={{ padding: 12 }}>{msg}</div>}
 
       {items.length === 0 ? (
-        <p className="muted">Belum ada notifikasi. Pesan akan muncul otomatis saat ada santri ditandai <strong>alpha</strong> (dan nomor orang tuanya terisi).</p>
+        <p className="muted">Belum ada notifikasi. Pesan akan muncul otomatis sesuai jadwal pengingat di atas.</p>
       ) : (
         <div className="card table-wrap" style={{ padding: 0 }}>
           <table>
             <thead>
               <tr>
-                <th style={{ width: 150 }}>Santri</th>
-                <th style={{ width: 90 }}>Kanal</th>
+                <th style={{ width: 150 }}>Jenis</th>
                 <th style={{ width: 100 }}>Tanggal</th>
-                <th style={{ width: 120 }}>Tujuan</th>
+                <th style={{ width: 130 }}>Tujuan</th>
                 <th>Pesan</th>
                 <th style={{ width: 90 }}>Status</th>
                 <th style={{ width: 150 }}>Aksi</th>
@@ -243,12 +373,7 @@ export default function NotifikasiPage() {
             <tbody>
               {items.map((it) => (
                 <tr key={it.id}>
-                  <td>{it.nama}</td>
-                  <td>
-                    <span className="badge izin" style={{ fontSize: 11 }}>
-                      {it.kanal === "telegram" ? "✈️ Telegram" : "💬 WhatsApp"}
-                    </span>
-                  </td>
+                  <td style={{ fontSize: 13 }}>{JENIS_LABEL[it.jenis] || it.jenis}</td>
                   <td>{it.ref_tanggal || "-"}</td>
                   <td style={{ fontSize: 13 }}>{it.tujuan}</td>
                   <td>
@@ -282,7 +407,7 @@ export default function NotifikasiPage() {
       {lihat && (
         <div className="card" style={{ padding: 16 }}>
           <div className="row" style={{ justifyContent: "space-between" }}>
-            <strong>Isi pesan — {lihat.nama}</strong>
+            <strong>Isi pesan — {JENIS_LABEL[lihat.jenis] || lihat.jenis}</strong>
             <button className="btn secondary" style={{ padding: "4px 10px" }} onClick={() => setLihat(null)}>Tutup</button>
           </div>
           <pre style={{ whiteSpace: "pre-wrap", fontFamily: "inherit", fontSize: 14, background: "#f8fafc", padding: 12, borderRadius: 8, marginTop: 10 }}>
