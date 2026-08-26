@@ -29,6 +29,7 @@ const MASTER_NAV = [
   { href: "/naik-kelas", label: "Naik Kelas", icon: "⬆️" },
   { href: "/master/guru", label: "Guru", icon: "👨‍🏫" },
   { href: "/master/kelas", label: "Kelas", icon: "🏫" },
+  { href: "/master/wali-kelas", label: "Wali Kelas", icon: "🧑‍🏫" },
   { href: "/master/pelajaran-kelas", label: "Pelajaran per Kelas", icon: "🔗" },
   { href: "/master/mapel", label: "Mata Pelajaran", icon: "📚" },
   { href: "/master/periode", label: "Periode", icon: "📆" },
@@ -60,6 +61,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   if (!ready) return <div style={{ padding: 40 }} className="muted">Memuat...</div>;
 
   const initial = (user?.nama || "?").trim().charAt(0).toUpperCase();
+  // superadmin = admin + wewenang tambahan, jadi seluruh menu admin ikut terbuka
+  const isAdmin = user?.role === "admin" || user?.role === "superadmin";
 
   return (
     <div className="layout">
@@ -71,7 +74,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <nav style={{ display: "flex", flexDirection: "column", gap: 3 }}>
           {NAV.map((n) => <NavLink key={n.href} {...n} pathname={pathname} />)}
 
-          {user?.role === "admin" && (
+          {isAdmin && (
             <>
               <div className="nav-section">Keuangan</div>
               {ADMIN_NAV.map((n) => <NavLink key={n.href} {...n} pathname={pathname} />)}
@@ -81,6 +84,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               {MASTER_NAV.map((n) => <NavLink key={n.href} {...n} pathname={pathname} />)}
             </>
           )}
+
+          <div className="nav-section">Akun</div>
+          <NavLink href="/ganti-password" label="Ganti Password" icon="🔑" pathname={pathname} />
         </nav>
       </aside>
 

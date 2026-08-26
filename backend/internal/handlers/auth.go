@@ -3,6 +3,7 @@ package handlers
 import (
 	"database/sql"
 	"encoding/json"
+	"log"
 	"net/http"
 	"time"
 
@@ -53,6 +54,12 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		httpx.Error(w, http.StatusInternalServerError, "TOKEN_ERROR", "Gagal membuat sesi")
 		return
+	}
+
+	// dicatat setelah token berhasil dibuat; kegagalan di sini tidak boleh
+	// menggagalkan login yang sudah sah
+	if _, err := h.DB.Exec(`UPDATE users SET terakhir_login = NOW() WHERE id = ?`, id); err != nil {
+		log.Printf("auth: gagal mencatat terakhir_login untuk user %d: %v", id, err)
 	}
 
 	http.SetCookie(w, &http.Cookie{

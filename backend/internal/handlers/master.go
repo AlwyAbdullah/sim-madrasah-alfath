@@ -11,7 +11,7 @@ import (
 )
 
 func (h *Handler) ListKelas(w http.ResponseWriter, r *http.Request) {
-	q := `SELECT id, nama, COALESCE(tingkat,''), aktif, wali_id FROM kelas`
+	q := `SELECT id, nama, COALESCE(tingkat,''), aktif FROM kelas`
 	if r.URL.Query().Get("aktif") == "1" {
 		q += ` WHERE aktif = 1`
 	}
@@ -23,17 +23,29 @@ func (h *Handler) ListKelas(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 	type kelas struct {
-		ID      int64  `json:"id"`
-		Nama    string `json:"nama"`
-		Tingkat string `json:"tingkat"`
-		Aktif   bool   `json:"aktif"`
-		WaliID  *int64 `json:"wali_id"`
+		ID      int64      `json:"id"`
+		Nama    string     `json:"nama"`
+		Tingkat string     `json:"tingkat"`
+		Aktif   bool       `json:"aktif"`
+		Wali    []waliItem `json:"wali"` // boleh lebih dari satu
 	}
 	out := []kelas{}
+	idx := map[int64]int{}
 	for rows.Next() {
 		var k kelas
-		_ = rows.Scan(&k.ID, &k.Nama, &k.Tingkat, &k.Aktif, &k.WaliID)
+		_ = rows.Scan(&k.ID, &k.Nama, &k.Tingkat, &k.Aktif)
+		k.Wali = []waliItem{}
+		idx[k.ID] = len(out)
 		out = append(out, k)
+	}
+
+	wali, err := h.semuaWali()
+	if err == nil {
+		for kelasID, daftar := range wali {
+			if i, ok := idx[kelasID]; ok {
+				out[i].Wali = daftar
+			}
+		}
 	}
 	httpx.JSON(w, http.StatusOK, out)
 }

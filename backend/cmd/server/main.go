@@ -61,6 +61,8 @@ func main() {
 			r.Use(middleware.RequireAuth(cfg.JWTSecret))
 
 			r.Get("/auth/me", h.Me)
+			// ganti password sendiri — semua peran
+			r.Post("/auth/ganti-password", h.GantiPasswordSaya)
 
 			// Master (baca — semua role login)
 			r.Get("/kelas", h.ListKelas)
@@ -143,6 +145,13 @@ func main() {
 				r.Post("/users", h.CreateUser)
 				r.Put("/users/{id}", h.UpdateUser)
 				r.Delete("/users/{id}", h.DeleteUser)
+				// akun massal dari master guru (idempoten — guru yang sudah punya dilewati)
+				r.Get("/users/dari-guru", h.PreviewAkunGuru)
+				r.Post("/users/dari-guru", h.BuatAkunDariGuru)
+
+				// wali kelas (boleh lebih dari satu per kelas)
+				r.Get("/kelas/{id}/wali", h.GetWaliKelas)
+				r.Put("/kelas/{id}/wali", h.SetWaliKelas)
 
 				r.Get("/guru", h.ListGuru)
 				r.Post("/guru", h.CreateGuru)
@@ -172,6 +181,12 @@ func main() {
 				r.Post("/absensi-guru/batch", h.SaveAbsensiGuru)
 				r.Get("/absensi-guru/rekap", h.RekapAbsensiGuru)
 				r.Get("/absensi-guru/export", h.ExportAbsensiGuru)
+
+				// ===== KHUSUS SUPERADMIN =====
+				r.Group(func(r chi.Router) {
+					r.Use(middleware.RequireRole("superadmin"))
+					r.Post("/users/{id}/reset-password", h.ResetPasswordUser)
+				})
 			})
 		})
 	})
