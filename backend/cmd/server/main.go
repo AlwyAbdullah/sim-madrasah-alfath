@@ -58,7 +58,7 @@ func main() {
 
 		// Terproteksi (semua guru bisa akses semua kelas — tanpa batasan kelas ampu)
 		r.Group(func(r chi.Router) {
-			r.Use(middleware.RequireAuth(cfg.JWTSecret))
+			r.Use(middleware.RequireAuth(cfg.JWTSecret, conn))
 
 			r.Get("/auth/me", h.Me)
 			// ganti password sendiri — semua peran
@@ -155,6 +155,8 @@ func main() {
 
 				// lini masa perubahan sistem
 				r.Get("/aktivitas", h.ListAktivitas)
+				// sesi yang sedang berjalan
+				r.Get("/sesi", h.ListSesi)
 
 				r.Get("/guru", h.ListGuru)
 				r.Post("/guru", h.CreateGuru)
@@ -189,6 +191,7 @@ func main() {
 				r.Group(func(r chi.Router) {
 					r.Use(middleware.RequireRole("superadmin"))
 					r.Post("/users/{id}/reset-password", h.ResetPasswordUser)
+					r.Delete("/sesi/{id}", h.PutusSesi)
 				})
 			})
 		})

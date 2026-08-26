@@ -327,6 +327,8 @@ func (h *Handler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 		dbErr(w, err)
 		return
 	}
+	// tendang keluar sekarang juga, jangan menunggu tokennya kedaluwarsa
+	h.akhiriSemuaSesiUser(id, c.UserID)
 	audit.Catat(h.DB, r, audit.Entri{
 		Aksi: audit.HapusAkun, Entitas: "users", EntitasID: id,
 		Ringkasan: fmt.Sprintf("Menonaktifkan akun id %s (peran %s)", id, role),
@@ -567,6 +569,15 @@ func (h *Handler) ResetPasswordUser(w http.ResponseWriter, r *http.Request) {
 		dbErr(w, err)
 		return
 	}
+	// Password lama tidak berlaku lagi, jadi sesi yang masih memakainya juga
+	// tidak boleh berlaku — kalau resetnya karena password bocor, membiarkan
+	// sesi lama hidup membuat resetnya sia-sia.
+	var pemutus interface{}
+	if c := middleware.ClaimsFrom(r); c != nil {
+		pemutus = c.UserID
+	}
+	h.akhiriSemuaSesiUser(id, pemutus)
+
 	audit.Catat(h.DB, r, audit.Entri{
 		Aksi: audit.ResetPassword, Entitas: "users", EntitasID: id,
 		Ringkasan: fmt.Sprintf("Mereset password akun id %s", id),

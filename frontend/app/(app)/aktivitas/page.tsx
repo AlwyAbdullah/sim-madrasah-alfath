@@ -19,9 +19,24 @@ type Entri = {
 
 type Pelaku = { user_id: number; nama: string };
 
+type Sesi = {
+  id: string;
+  user_id: number;
+  username: string;
+  nama: string;
+  role: string;
+  ip: string | null;
+  perangkat: string;
+  dibuat_at: string;
+  terakhir_aktif: string;
+  sesi_saya_ini: boolean;
+};
+
 const AKSI_LABEL: Record<string, string> = {
   login: "Login",
+  login_gagal: "Login GAGAL",
   logout: "Logout",
+  putus_sesi: "Sesi diputus",
   simpan_absensi: "Absensi",
   simpan_nilai: "Nilai",
   simpan_tugas: "Tugas",
@@ -43,6 +58,8 @@ const AKSI_LABEL: Record<string, string> = {
 
 // aksi yang perlu menonjol saat disapu mata
 const WARNA: Record<string, string> = {
+  login_gagal: "alpha",
+  putus_sesi: "alpha",
   reset_password: "alpha",
   hapus_akun: "alpha",
   naik_kelas: "alpha",
@@ -55,7 +72,26 @@ const WARNA: Record<string, string> = {
 
 const HALAMAN = 100;
 
+// jenis peristiwa yang ditampilkan di tab "Riwayat login"
+const AKSI_SESI = ["login", "login_gagal", "logout", "putus_sesi"];
+
+type Tab = "sesi" | "login" | "log";
+
+function menitLalu(iso: string) {
+  const t = new Date(iso).getTime();
+  if (isNaN(t)) return "";
+  const m = Math.floor((Date.now() - t) / 60000);
+  if (m < 1) return "baru saja";
+  if (m < 60) return `${m} menit lalu`;
+  const j = Math.floor(m / 60);
+  if (j < 24) return `${j} jam lalu`;
+  return `${Math.floor(j / 24)} hari lalu`;
+}
+
 export default function AktivitasPage() {
+  const [tab, setTab] = useState<Tab>("sesi");
+  const [saya, setSaya] = useState<{ role: string } | null>(null);
+  const [sesi, setSesi] = useState<Sesi[]>([]);
   const [items, setItems] = useState<Entri[]>([]);
   const [aksiTersedia, setAksi] = useState<string[]>([]);
   const [pelaku, setPelaku] = useState<Pelaku[]>([]);
@@ -70,12 +106,31 @@ export default function AktivitasPage() {
   const [fCari, setFCari] = useState("");
   const [offset, setOffset] = useState(0);
 
+  const loadSesi = useCallback(async () => {
+    try { setSesi(await api("/sesi")); } catch (e: any) { setMsg(e.message); }
+  }, []);
+
+  useEffect(() => {
+    api("/auth/me").then((d) => setSaya(d.user)).catch(() => {});
+    loadSesi();
+  }, [loadSesi]);
+
+  // "sedang aktif" hanya berarti kalau angkanya segar
+  useEffect(() => {
+    if (tab !== "sesi") return;
+    const t = setInterval(loadSesi, 30000);
+    return () => clearInterval(t);
+  }, [tab, loadSesi]);
+
   const load = useCallback(async () => {
+    if (tab === "sesi") return;
     setMuat(true);
     try {
       const p = new URLSearchParams();
       if (fUser) p.set("user_id", fUser);
-      if (fAksi) p.set("aksi", fAksi);
+      // tab Riwayat login mengunci jenisnya ke peristiwa seputar sesi
+      if (tab === "login") p.set("aksi", AKSI_SESI.join(","));
+      else if (fAksi) p.set("aksi", fAksi);
       if (fDari) p.set("dari", fDari);
       if (fSampai) p.set("sampai", fSampai);
       if (fCari) p.set("cari", fCari);
@@ -87,9 +142,20 @@ export default function AktivitasPage() {
       setPelaku(d.pelaku || []);
     } catch (e: any) { setMsg(e.message); }
     finally { setMuat(false); }
-  }, [fUser, fAksi, fDari, fSampai, fCari, offset]);
+  }, [tab, fUser, fAksi, fDari, fSampai, fCari, offset]);
 
   useEffect(() => { load(); }, [load]);
+
+  async function putus(s: Sesi) {
+    if (!confirm(
+      `Putus sesi ${s.nama}?\n\nOrangnya akan langsung keluar dan harus login lagi.`
+    )) return;
+    try {
+      const d = await api(`/sesi/${s.id}`, { method: "DELETE" });
+      setMsg(d.message);
+      await loadSesi();
+    } catch (e: any) { setMsg("❌ " + e.message); }
+  }
 
   // ganti saringan berarti kembali ke halaman pertama
   function saring(set: (v: string) => void) {
@@ -105,9 +171,79 @@ export default function AktivitasPage() {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       <h1 style={{ margin: 0 }}>Aktivitas</h1>
+
+      <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+        {([
+          ["sesi", `🟢 Sesi aktif${sesi.length ? ` (${sesi.length})` : ""}`],
+          ["login", "🔑 Riwayat login"],
+          ["log", "📜 Log aktivitas"],
+        ] as [Tab, string][]).map(([k, label]) => (
+          <button key={k} className={tab === k ? "btn" : "btn secondary"}
+            onClick={() => { setTab(k); setOffset(0); setBuka(null); }}>{label}</button>
+        ))}
+      </div>
+
+      {tab === "sesi" && (
+        <>
+          <p className="muted" style={{ margin: 0, fontSize: 13 }}>
+            Siapa yang sedang masuk ke sistem sekarang. Daftar ini menyegar sendiri tiap 30 detik.
+            {saya?.role === "superadmin" && " Sebagai superadmin, Anda bisa memutus sesi orang lain."}
+          </p>
+          {sesi.length === 0 ? (
+            <p className="muted">Tidak ada sesi aktif.</p>
+          ) : (
+            <div className="card table-wrap" style={{ padding: 0 }}>
+              <table>
+                <thead>
+                  <tr>
+                    <th style={{ width: 200 }}>Pengguna</th>
+                    <th style={{ width: 110 }}>Peran</th>
+                    <th style={{ width: 170 }}>Perangkat</th>
+                    <th style={{ width: 130 }}>IP</th>
+                    <th style={{ width: 130 }}>Masuk sejak</th>
+                    <th style={{ width: 130 }}>Terakhir aktif</th>
+                    <th style={{ width: 110 }}></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sesi.map((s) => (
+                    <tr key={s.id}>
+                      <td style={{ fontSize: 13 }}>
+                        {s.nama}
+                        {s.sesi_saya_ini && <span className="badge hadir" style={{ marginLeft: 6, fontSize: 10 }}>Anda</span>}
+                        <div className="muted" style={{ fontSize: 11, fontFamily: "monospace" }}>{s.username}</div>
+                      </td>
+                      <td>
+                        <span className={`badge ${s.role === "superadmin" ? "alpha" : s.role === "admin" ? "sakit" : "izin"}`}>
+                          {s.role}
+                        </span>
+                      </td>
+                      <td style={{ fontSize: 12 }}>{s.perangkat}</td>
+                      <td style={{ fontSize: 12, fontFamily: "monospace" }}>{s.ip || "-"}</td>
+                      <td style={{ fontSize: 12 }}>{s.dibuat_at.slice(0, 16).replace("T", " ")}</td>
+                      <td style={{ fontSize: 12 }}>{menitLalu(s.terakhir_aktif)}</td>
+                      <td>
+                        {saya?.role === "superadmin" && !s.sesi_saya_ini && (
+                          <button className="btn secondary" style={{ padding: "4px 8px", color: "var(--danger)" }}
+                            onClick={() => putus(s)}>Putuskan</button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {msg && <div className="card" style={{ padding: 12 }}>{msg}</div>}
+        </>
+      )}
+
+      {tab !== "sesi" && (
+      <>
       <p className="muted" style={{ margin: 0, fontSize: 13 }}>
-        Lini masa perubahan sistem. Dicatat <strong>per tindakan</strong>, bukan per baris data —
-        menyimpan absensi satu kelas muncul sebagai satu entri, bukan sepuluh.
+        {tab === "login"
+          ? "Peristiwa masuk dan keluar sistem, termasuk percobaan login yang gagal."
+          : "Lini masa perubahan sistem. Dicatat per tindakan, bukan per baris data — menyimpan absensi satu kelas muncul sebagai satu entri, bukan sepuluh."}
       </p>
 
       <div className="card" style={{ padding: 12, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
@@ -119,14 +255,16 @@ export default function AktivitasPage() {
             {pelaku.map((p) => <option key={p.user_id} value={p.user_id}>{p.nama}</option>)}
           </select>
         </label>
-        <label style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-          <span style={{ fontSize: 12 }} className="muted">Jenis</span>
-          <select className="input" style={{ width: 170 }} value={fAksi}
-            onChange={(e) => saring(setFAksi)(e.target.value)}>
-            <option value="">— semua —</option>
-            {aksiTersedia.map((a) => <option key={a} value={a}>{AKSI_LABEL[a] || a}</option>)}
-          </select>
-        </label>
+        {tab === "log" && (
+          <label style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+            <span style={{ fontSize: 12 }} className="muted">Jenis</span>
+            <select className="input" style={{ width: 170 }} value={fAksi}
+              onChange={(e) => saring(setFAksi)(e.target.value)}>
+              <option value="">— semua —</option>
+              {aksiTersedia.map((a) => <option key={a} value={a}>{AKSI_LABEL[a] || a}</option>)}
+            </select>
+          </label>
+        )}
         <label style={{ display: "flex", flexDirection: "column", gap: 3 }}>
           <span style={{ fontSize: 12 }} className="muted">Dari</span>
           <input className="input" type="date" style={{ width: 150 }} value={fDari}
@@ -226,6 +364,8 @@ export default function AktivitasPage() {
         <button className="btn secondary" disabled={items.length < HALAMAN}
           onClick={() => setOffset(offset + HALAMAN)}>Berikutnya →</button>
       </div>
+      </>
+      )}
     </div>
   );
 }

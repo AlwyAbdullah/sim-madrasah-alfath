@@ -44,7 +44,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		// ada yang menebak-nebak password — risiko nyata selama password awal
 		// masih seragam.
 		audit.CatatUser(h.DB, r, 0, req.Username, req.Username, audit.Entri{
-			Aksi:      audit.Login,
+			Aksi:      audit.LoginGagal,
 			Ringkasan: fmt.Sprintf("Percobaan login GAGAL untuk %q", req.Username),
 		})
 		httpx.Error(w, http.StatusUnauthorized, "INVALID_CREDENTIALS", "Username atau password salah")
@@ -59,8 +59,17 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, err := auth.GenerateToken(h.Cfg.JWTSecret, h.Cfg.JWTExpiryMin, id, req.Username, role)
+	// Sesi dibuat SEBELUM token, karena id-nya ditanam ke dalam token. Kalau
+	// gagal, login dibatalkan — token tanpa sesi tidak akan bisa dipakai.
+	sesiID, err := h.buatSesi(r, id)
 	if err != nil {
+		httpx.Error(w, http.StatusInternalServerError, "SESI_ERROR", "Gagal membuat sesi")
+		return
+	}
+
+	token, err := auth.GenerateToken(h.Cfg.JWTSecret, h.Cfg.JWTExpiryMin, id, req.Username, role, sesiID)
+	if err != nil {
+		_ = h.akhiriSesi(sesiID, nil) // jangan tinggalkan sesi yatim
 		httpx.Error(w, http.StatusInternalServerError, "TOKEN_ERROR", "Gagal membuat sesi")
 		return
 	}
@@ -99,6 +108,13 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 		var nama string
 		if err := h.DB.QueryRow(`SELECT nama FROM users WHERE id = ?`, c.UserID).Scan(&nama); err != nil || nama == "" {
 			nama = c.Username
+		}
+		// Inilah yang membuat logout benar-benar mencabut token, bukan sekadar
+		// menghapus cookie di peramban.
+		if c.SesiID != "" {
+			if err := h.akhiriSesi(c.SesiID, nil); err != nil {
+				log.Printf("auth: gagal mengakhiri sesi %s: %v", c.SesiID, err)
+			}
 		}
 		audit.CatatUser(h.DB, r, c.UserID, c.Username, nama, audit.Entri{
 			Aksi:      audit.Logout,

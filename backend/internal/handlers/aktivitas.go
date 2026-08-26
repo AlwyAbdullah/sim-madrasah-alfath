@@ -36,9 +36,19 @@ func (h *Handler) ListAktivitas(w http.ResponseWriter, r *http.Request) {
 		q += ` AND user_id = ?`
 		args = append(args, v)
 	}
+	// aksi boleh berisi beberapa nilai dipisah koma — dipakai tab "Riwayat login"
+	// yang menggabungkan login, login gagal, logout, dan sesi diputus.
 	if v := r.URL.Query().Get("aksi"); v != "" {
-		q += ` AND aksi = ?`
-		args = append(args, v)
+		bagian := []string{}
+		for _, a := range strings.Split(v, ",") {
+			if a = strings.TrimSpace(a); a != "" {
+				bagian = append(bagian, a)
+				args = append(args, a)
+			}
+		}
+		if len(bagian) > 0 {
+			q += ` AND aksi IN (?` + strings.Repeat(",?", len(bagian)-1) + `)`
+		}
 	}
 	if v := r.URL.Query().Get("dari"); v != "" {
 		q += ` AND created_at >= ?`

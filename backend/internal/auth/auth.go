@@ -12,6 +12,10 @@ type Claims struct {
 	UserID   int64  `json:"uid"`
 	Username string `json:"username"`
 	Role     string `json:"role"`
+	// SesiID menghubungkan token ke satu baris sesi_login. Tanpa ini token tidak
+	// bisa dicabut sebelum kedaluwarsa — logout hanya menghapus cookie di sisi
+	// peramban, sementara tokennya sendiri tetap sah.
+	SesiID string `json:"sid,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -24,12 +28,13 @@ func CheckPassword(hash, plain string) bool {
 	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(plain)) == nil
 }
 
-func GenerateToken(secret string, expiryMin int, uid int64, username, role string) (string, error) {
+func GenerateToken(secret string, expiryMin int, uid int64, username, role, sesiID string) (string, error) {
 	now := time.Now()
 	claims := Claims{
 		UserID:   uid,
 		Username: username,
 		Role:     role,
+		SesiID:   sesiID,
 		RegisteredClaims: jwt.RegisteredClaims{
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(now.Add(time.Duration(expiryMin) * time.Minute)),

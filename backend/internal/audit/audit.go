@@ -23,7 +23,9 @@ import (
 // diam-diam memecah penyaringan di halaman Aktivitas.
 const (
 	Login            = "login"
+	LoginGagal       = "login_gagal"
 	Logout           = "logout"
+	PutusSesi        = "putus_sesi"
 	SimpanAbsensi    = "simpan_absensi"
 	SimpanNilai      = "simpan_nilai"
 	SimpanTugas      = "simpan_tugas"
