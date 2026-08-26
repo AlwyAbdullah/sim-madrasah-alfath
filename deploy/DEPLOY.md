@@ -3,6 +3,10 @@
 > - **Server:** Ubuntu 22.04, user `deploy`, kode di `/home/deploy/sim-madrasah`.
 > - **Backend** Go `:8090` → service `sim-madrasah-backend`. **Frontend** Next `:3000` → `sim-madrasah-frontend`. DB MySQL `sim_madrasah` (user `sim_user`).
 > - **Nginx** `sites-available/sim-madrasah` (server_name = domain + www + IP). Tidak mengganggu situs `sayalulus` yang ada.
+> - **Backend & frontend hanya mendengarkan di `127.0.0.1`**, jadi keduanya HANYA bisa dicapai lewat nginx.
+>   Backend: `APP_HOST=127.0.0.1` di `.env`. Frontend: `next start -H 127.0.0.1` di `package.json`.
+>   ⚠️ Jangan diubah ke `0.0.0.0` — sebelumnya keduanya terbuka ke internet, sehingga API bisa
+>   dihubungi langsung tanpa HTTPS dan header `X-Forwarded-For` bisa dikarang (pembatas login jadi bisa dilewati).
 > - **Update rilis berikutnya:** jalankan `bash deploy/redeploy.sh` dari mesin lokal (Git Bash).
 > - **Log:** `journalctl -u sim-madrasah-backend -e` / `... -frontend -e`.
 > - **HTTPS:** ✅ aktif (Let's Encrypt, auto-renew via `certbot.timer`; kedaluwarsa 26 Okt 2026). `COOKIE_SECURE=true` & `CORS_ORIGIN=https://madrasah-alfath-malang.web.id` di `.env`.

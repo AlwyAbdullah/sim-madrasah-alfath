@@ -194,7 +194,7 @@ func main() {
 		})
 	})
 
-	addr := ":" + cfg.AppPort
+	addr := cfg.AppHost + ":" + cfg.AppPort
 	log.Printf("SIM-Madrasah backend berjalan di %s (env=%s)", addr, cfg.AppEnv)
 	if err := http.ListenAndServe(addr, r); err != nil {
 		log.Fatal(err)

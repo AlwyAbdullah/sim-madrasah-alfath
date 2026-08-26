@@ -9,6 +9,12 @@ import (
 )
 
 type Config struct {
+	// AppHost = alamat yang didengarkan. Bawaannya 127.0.0.1 karena backend ini
+	// SELALU diakses lewat nginx (proxy_pass 127.0.0.1:8090); mengikat ke semua
+	// antarmuka berarti API-nya bisa dihubungi langsung dari internet — melewati
+	// HTTPS dan melewati seluruh penanganan header nginx.
+	// Isi "0.0.0.0" hanya bila memang perlu diakses dari mesin lain.
+	AppHost      string
 	AppPort      string
 	AppEnv       string
 	CorsOrigin   string
@@ -41,6 +47,7 @@ func Load() *Config {
 	secure, _ := strconv.ParseBool(getEnv("COOKIE_SECURE", "false"))
 
 	return &Config{
+		AppHost:      getEnv("APP_HOST", "127.0.0.1"),
 		AppPort:      getEnv("APP_PORT", "8080"),
 		AppEnv:       getEnv("APP_ENV", "development"),
 		CorsOrigin:   getEnv("CORS_ORIGIN", "http://localhost:3000"),
