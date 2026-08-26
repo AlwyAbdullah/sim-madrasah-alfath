@@ -9,6 +9,7 @@ import (
 
 	"github.com/xuri/excelize/v2"
 
+	"sim-madrasah/backend/internal/audit"
 	"sim-madrasah/backend/internal/httpx"
 	"sim-madrasah/backend/internal/middleware"
 )
@@ -226,10 +227,11 @@ func (h *Handler) SaveSPPBatch(w http.ResponseWriter, r *http.Request) {
 
 	// dua varian upsert: dengan / tanpa menyentuh kolom keterangan
 	upsertKet, err := tx.Prepare(`
-		INSERT INTO spp (santri_id, tahun, bulan, lunas, keterangan, tanggal_bayar, created_by)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO spp (santri_id, tahun, bulan, lunas, keterangan, tanggal_bayar, created_by, updated_by)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 		ON DUPLICATE KEY UPDATE lunas = VALUES(lunas), keterangan = VALUES(keterangan),
-		                        tanggal_bayar = VALUES(tanggal_bayar)`)
+		                        tanggal_bayar = VALUES(tanggal_bayar),
+		                        updated_by = VALUES(updated_by)`)
 	if err != nil {
 		httpx.Error(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
@@ -237,9 +239,10 @@ func (h *Handler) SaveSPPBatch(w http.ResponseWriter, r *http.Request) {
 	defer upsertKet.Close()
 
 	upsert, err := tx.Prepare(`
-		INSERT INTO spp (santri_id, tahun, bulan, lunas, tanggal_bayar, created_by)
-		VALUES (?, ?, ?, ?, ?, ?)
-		ON DUPLICATE KEY UPDATE lunas = VALUES(lunas), tanggal_bayar = VALUES(tanggal_bayar)`)
+		INSERT INTO spp (santri_id, tahun, bulan, lunas, tanggal_bayar, created_by, updated_by)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
+		ON DUPLICATE KEY UPDATE lunas = VALUES(lunas), tanggal_bayar = VALUES(tanggal_bayar),
+		                        updated_by = VALUES(updated_by)`)
 	if err != nil {
 		httpx.Error(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
@@ -277,12 +280,12 @@ func (h *Handler) SaveSPPBatch(w http.ResponseWriter, r *http.Request) {
 			tgl = hariIni
 		}
 		if it.Keterangan != nil {
-			if _, err := upsertKet.Exec(it.SantriID, calY, it.Bulan, it.Lunas, ketBaru, tgl, userID); err != nil {
+			if _, err := upsertKet.Exec(it.SantriID, calY, it.Bulan, it.Lunas, ketBaru, tgl, userID, userID); err != nil {
 				httpx.Error(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 				return
 			}
 		} else {
-			if _, err := upsert.Exec(it.SantriID, calY, it.Bulan, it.Lunas, tgl, userID); err != nil {
+			if _, err := upsert.Exec(it.SantriID, calY, it.Bulan, it.Lunas, tgl, userID, userID); err != nil {
 				httpx.Error(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 				return
 			}
@@ -315,6 +318,12 @@ func (h *Handler) SaveSPPBatch(w http.ResponseWriter, r *http.Request) {
 	resp := map[string]interface{}{"saved": saved}
 	if saved > 0 {
 		resp["batch_id"] = batchID
+		audit.Catat(h.DB, r, audit.Entri{
+			Aksi:      audit.SimpanSPP,
+			Entitas:   "spp",
+			EntitasID: batchID,
+			Ringkasan: fmt.Sprintf("Menyimpan SPP TA %d/%d — %d sel diubah", req.Tahun, req.Tahun+1, saved),
+		})
 	}
 	httpx.JSON(w, http.StatusOK, resp)
 }

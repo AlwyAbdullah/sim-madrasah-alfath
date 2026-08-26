@@ -22,13 +22,18 @@ export default function AbsensiPage() {
   const [items, setItems] = useState<Item[]>([]);
   const [msg, setMsg] = useState("");
   const [saving, setSaving] = useState(false);
+  // siapa yang terakhir menyentuh absensi kelas+tanggal ini
+  const [jejak, setJejak] = useState<{ oleh: string; pada: string } | null>(null);
 
   useEffect(() => { api("/kelas?aktif=1").then(setKelas).catch(() => {}); }, []);
 
   async function load() {
-    if (!kelasId) { setItems([]); return; }
+    if (!kelasId) { setItems([]); setJejak(null); return; }
     const d = await api(`/absensi?kelas_id=${kelasId}&tanggal=${tanggal}`);
     setItems(d.items.map((it: Item) => ({ ...it, status: it.status || "" })));
+    setJejak(d.terakhir_diubah_oleh
+      ? { oleh: d.terakhir_diubah_oleh, pada: (d.terakhir_diubah_pada || "").slice(0, 16).replace("T", " ") }
+      : null);
     setMsg("");
   }
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [kelasId, tanggal]);
@@ -113,6 +118,12 @@ export default function AbsensiPage() {
           <span className="badge izin">Izin {counts.izin}</span>
           <span className="badge sakit">Sakit {counts.sakit}</span>
           <span className="badge alpha">Alpha {counts.alpha}</span>
+        </div>
+      )}
+
+      {jejak && (
+        <div className="muted" style={{ fontSize: 12 }}>
+          ✏️ Terakhir diubah oleh <strong>{jejak.oleh}</strong>{jejak.pada ? ` · ${jejak.pada}` : ""}
         </div>
       )}
 

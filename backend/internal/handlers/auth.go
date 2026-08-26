@@ -3,10 +3,12 @@ package handlers
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"time"
 
+	"sim-madrasah/backend/internal/audit"
 	"sim-madrasah/backend/internal/auth"
 	"sim-madrasah/backend/internal/httpx"
 	"sim-madrasah/backend/internal/middleware"
@@ -38,6 +40,13 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 
 	// Pesan generik untuk mencegah enumerasi user.
 	if err == sql.ErrNoRows || !auth.CheckPassword(passwordHash, req.Password) {
+		// Percobaan yang GAGAL ikut dicatat: lonjakannya adalah tanda pertama
+		// ada yang menebak-nebak password — risiko nyata selama password awal
+		// masih seragam.
+		audit.CatatUser(h.DB, r, 0, req.Username, req.Username, audit.Entri{
+			Aksi:      audit.Login,
+			Ringkasan: fmt.Sprintf("Percobaan login GAGAL untuk %q", req.Username),
+		})
 		httpx.Error(w, http.StatusUnauthorized, "INVALID_CREDENTIALS", "Username atau password salah")
 		return
 	}
@@ -61,6 +70,10 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	if _, err := h.DB.Exec(`UPDATE users SET terakhir_login = NOW() WHERE id = ?`, id); err != nil {
 		log.Printf("auth: gagal mencatat terakhir_login untuk user %d: %v", id, err)
 	}
+	audit.CatatUser(h.DB, r, id, req.Username, nama, audit.Entri{
+		Aksi:      audit.Login,
+		Ringkasan: fmt.Sprintf("%s masuk ke sistem", nama),
+	})
 
 	http.SetCookie(w, &http.Cookie{
 		Name:     middleware.CookieName,
@@ -78,6 +91,20 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
+	// Rute logout sengaja TIDAK di balik RequireAuth: cookie yang sudah
+	// kedaluwarsa pun harus tetap bisa dibersihkan. Karena itu claims-nya
+	// dibaca sendiri di sini — kalau mengandalkan middleware, pelakunya selalu
+	// tidak dikenal dan logout tidak pernah tercatat.
+	if c := h.claimsDariCookie(r); c != nil {
+		var nama string
+		if err := h.DB.QueryRow(`SELECT nama FROM users WHERE id = ?`, c.UserID).Scan(&nama); err != nil || nama == "" {
+			nama = c.Username
+		}
+		audit.CatatUser(h.DB, r, c.UserID, c.Username, nama, audit.Entri{
+			Aksi:      audit.Logout,
+			Ringkasan: fmt.Sprintf("%s keluar dari sistem", nama),
+		})
+	}
 	http.SetCookie(w, &http.Cookie{
 		Name:     middleware.CookieName,
 		Value:    "",
@@ -88,6 +115,25 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 		MaxAge:   -1,
 	})
 	httpx.JSON(w, http.StatusOK, map[string]string{"message": "Berhasil logout"})
+}
+
+// claimsDariCookie membaca JWT dari cookie/header tanpa mewajibkannya sah.
+// Mengembalikan nil bila tidak ada atau tidak valid.
+func (h *Handler) claimsDariCookie(r *http.Request) *auth.Claims {
+	tokenStr := ""
+	if c, err := r.Cookie(middleware.CookieName); err == nil {
+		tokenStr = c.Value
+	} else if hdr := r.Header.Get("Authorization"); len(hdr) > 7 && hdr[:7] == "Bearer " {
+		tokenStr = hdr[7:]
+	}
+	if tokenStr == "" {
+		return nil
+	}
+	c, err := auth.ParseToken(h.Cfg.JWTSecret, tokenStr)
+	if err != nil {
+		return nil
+	}
+	return c
 }
 
 func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {

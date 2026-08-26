@@ -3,8 +3,10 @@ package handlers
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 
+	"sim-madrasah/backend/internal/audit"
 	"sim-madrasah/backend/internal/httpx"
 	"sim-madrasah/backend/internal/middleware"
 	"sim-madrasah/backend/internal/models"
@@ -78,12 +80,13 @@ func (h *Handler) SaveNilai(w http.ResponseWriter, r *http.Request) {
 	defer tx.Rollback()
 
 	stmt, err := tx.Prepare(`
-		INSERT INTO nilai (santri_id, mata_pelajaran_id, periode_id, tugas, uts, uas, nilai_akhir, created_by)
-		VALUES (?, ?, ?, ?, ?, ?, 0, ?)
+		INSERT INTO nilai (santri_id, mata_pelajaran_id, periode_id, tugas, uts, uas, nilai_akhir, created_by, updated_by)
+		VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)
 		ON DUPLICATE KEY UPDATE
 		    tugas = COALESCE(VALUES(tugas), tugas),
 		    uts   = COALESCE(VALUES(uts),   uts),
-		    uas   = COALESCE(VALUES(uas),   uas)`)
+		    uas   = COALESCE(VALUES(uas),   uas),
+		    updated_by = VALUES(updated_by)`)
 	if err != nil {
 		httpx.Error(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
@@ -97,7 +100,7 @@ func (h *Handler) SaveNilai(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if _, err := stmt.Exec(it.SantriID, batch.MataPelajaranID, batch.PeriodeID,
-			it.Tugas, it.UTS, it.UAS, userID); err != nil {
+			it.Tugas, it.UTS, it.UAS, userID, userID); err != nil {
 			httpx.Error(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 			return
 		}
@@ -116,6 +119,17 @@ func (h *Handler) SaveNilai(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
 	}
+
+	var kelas, mapel string
+	_ = h.DB.QueryRow(`SELECT nama FROM kelas WHERE id = ?`, batch.KelasID).Scan(&kelas)
+	_ = h.DB.QueryRow(`SELECT nama FROM mata_pelajaran WHERE id = ?`, batch.MataPelajaranID).Scan(&mapel)
+	audit.Catat(h.DB, r, audit.Entri{
+		Aksi:      audit.SimpanNilai,
+		Entitas:   "nilai",
+		EntitasID: fmt.Sprintf("%d", batch.KelasID),
+		Ringkasan: fmt.Sprintf("Menyimpan nilai %s — %s, %d santri", kelas, mapel, saved),
+	})
+
 	httpx.JSON(w, http.StatusOK, map[string]interface{}{"saved": saved})
 }
 

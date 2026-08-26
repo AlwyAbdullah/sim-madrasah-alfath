@@ -3,13 +3,26 @@ package handlers
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
+	"strconv"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-sql-driver/mysql"
 
+	"sim-madrasah/backend/internal/audit"
 	"sim-madrasah/backend/internal/httpx"
+	"sim-madrasah/backend/internal/middleware"
 )
+
+// pelaku mengembalikan id pengguna untuk kolom updated_by, atau NULL bila tidak
+// diketahui (mis. dipanggil di luar konteks permintaan yang terautentikasi).
+func pelaku(r *http.Request) interface{} {
+	if c := middleware.ClaimsFrom(r); c != nil {
+		return c.UserID
+	}
+	return nil
+}
 
 // ---- helper error MySQL ----
 func dbErr(w http.ResponseWriter, err error) {
@@ -81,7 +94,8 @@ func (h *Handler) UpdateKelas(w http.ResponseWriter, r *http.Request) {
 	if req.Aktif != nil {
 		aktif = *req.Aktif
 	}
-	if _, err := h.DB.Exec(`UPDATE kelas SET nama = ?, tingkat = ?, aktif = ? WHERE id = ?`, req.Nama, nullStr(req.Tingkat), aktif, id); err != nil {
+	if _, err := h.DB.Exec(`UPDATE kelas SET nama = ?, tingkat = ?, aktif = ?, updated_by = ? WHERE id = ?`,
+		req.Nama, nullStr(req.Tingkat), aktif, pelaku(r), id); err != nil {
 		dbErr(w, err)
 		return
 	}
@@ -122,7 +136,21 @@ func (h *Handler) CreateSantri(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id, _ := res.LastInsertId()
+	audit.Catat(h.DB, r, audit.Entri{
+		Aksi: audit.TambahSantri, Entitas: "santri", EntitasID: strconv.FormatInt(id, 10),
+		Ringkasan: fmt.Sprintf("Menambah santri %s ke %s", req.Nama, h.namaKelas(req.KelasID)),
+	})
 	httpx.JSON(w, http.StatusCreated, map[string]interface{}{"id": id})
+}
+
+// namaKelas dipakai untuk menyusun ringkasan log yang bisa dibaca manusia —
+// "Kelas 3" jauh lebih berguna daripada "kelas_id 5".
+func (h *Handler) namaKelas(id int64) string {
+	var nama string
+	if err := h.DB.QueryRow(`SELECT nama FROM kelas WHERE id = ?`, id).Scan(&nama); err != nil {
+		return "-"
+	}
+	return nama
 }
 
 func (h *Handler) UpdateSantri(w http.ResponseWriter, r *http.Request) {
@@ -135,21 +163,35 @@ func (h *Handler) UpdateSantri(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, http.StatusBadRequest, "BAD_REQUEST", "Nama, jenis kelamin (L/P), dan kelas wajib")
 		return
 	}
-	if _, err := h.DB.Exec(`UPDATE santri SET nis = ?, nama = ?, jenis_kelamin = ?, no_ortu = ?, kelas_id = ? WHERE id = ?`,
-		nullStr(req.NIS), req.Nama, req.JenisKelamin, nullStr(req.NoOrtu), req.KelasID, id); err != nil {
+	if _, err := h.DB.Exec(`
+		UPDATE santri SET nis = ?, nama = ?, jenis_kelamin = ?, no_ortu = ?, kelas_id = ?, updated_by = ?
+		WHERE id = ?`,
+		nullStr(req.NIS), req.Nama, req.JenisKelamin, nullStr(req.NoOrtu), req.KelasID,
+		pelaku(r), id); err != nil {
 		dbErr(w, err)
 		return
 	}
+	audit.Catat(h.DB, r, audit.Entri{
+		Aksi: audit.UbahSantri, Entitas: "santri", EntitasID: id,
+		Ringkasan: fmt.Sprintf("Mengubah data santri %s (%s)", req.Nama, h.namaKelas(req.KelasID)),
+	})
 	httpx.JSON(w, http.StatusOK, map[string]string{"message": "ok"})
 }
 
 // DeleteSantri: soft-delete (is_active=0) agar riwayat absensi/nilai tetap aman.
 func (h *Handler) DeleteSantri(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	if _, err := h.DB.Exec(`UPDATE santri SET is_active = 0 WHERE id = ?`, id); err != nil {
+	var nama string
+	_ = h.DB.QueryRow(`SELECT nama FROM santri WHERE id = ?`, id).Scan(&nama)
+	if _, err := h.DB.Exec(`UPDATE santri SET is_active = 0, updated_by = ? WHERE id = ?`,
+		pelaku(r), id); err != nil {
 		dbErr(w, err)
 		return
 	}
+	audit.Catat(h.DB, r, audit.Entri{
+		Aksi: audit.HapusSantri, Entitas: "santri", EntitasID: id,
+		Ringkasan: fmt.Sprintf("Menonaktifkan santri %s", nama),
+	})
 	httpx.JSON(w, http.StatusOK, map[string]string{"message": "ok"})
 }
 
@@ -188,7 +230,8 @@ func (h *Handler) UpdateMapel(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, http.StatusBadRequest, "BAD_REQUEST", "Nama mata pelajaran wajib")
 		return
 	}
-	if _, err := h.DB.Exec(`UPDATE mata_pelajaran SET kode = ?, nama = ?, kitab = ? WHERE id = ?`, nullStr(req.Kode), req.Nama, nullStr(req.Kitab), id); err != nil {
+	if _, err := h.DB.Exec(`UPDATE mata_pelajaran SET kode = ?, nama = ?, kitab = ?, updated_by = ? WHERE id = ?`,
+		nullStr(req.Kode), req.Nama, nullStr(req.Kitab), pelaku(r), id); err != nil {
 		dbErr(w, err)
 		return
 	}
@@ -241,11 +284,17 @@ func (h *Handler) UpdatePeriode(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, http.StatusBadRequest, "BAD_REQUEST", "Nama, tahun ajaran, semester (ganjil/genap) wajib")
 		return
 	}
-	if _, err := h.DB.Exec(`UPDATE periode SET nama = ?, tahun_ajaran = ?, semester = ?, is_active = ? WHERE id = ?`,
-		req.Nama, req.TahunAjaran, req.Semester, req.IsActive, id); err != nil {
+	if _, err := h.DB.Exec(`
+		UPDATE periode SET nama = ?, tahun_ajaran = ?, semester = ?, is_active = ?, updated_by = ?
+		WHERE id = ?`,
+		req.Nama, req.TahunAjaran, req.Semester, req.IsActive, pelaku(r), id); err != nil {
 		dbErr(w, err)
 		return
 	}
+	audit.Catat(h.DB, r, audit.Entri{
+		Aksi: audit.UbahMaster, Entitas: "periode", EntitasID: id,
+		Ringkasan: fmt.Sprintf("Mengubah periode %s (%s %s)", req.Nama, req.TahunAjaran, req.Semester),
+	})
 	httpx.JSON(w, http.StatusOK, map[string]string{"message": "ok"})
 }
 

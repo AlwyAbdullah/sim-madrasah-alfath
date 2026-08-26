@@ -1,8 +1,10 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 
+	"sim-madrasah/backend/internal/audit"
 	"sim-madrasah/backend/internal/httpx"
 )
 
@@ -32,11 +34,25 @@ func (h *Handler) NaikKelas(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, http.StatusBadRequest, "BAD_REQUEST", "Kelas tujuan tidak ditemukan")
 		return
 	}
-	res, err := h.DB.Exec(`UPDATE santri SET kelas_id = ? WHERE kelas_id = ? AND is_active = 1`, req.ToKelasID, req.FromKelasID)
+	res, err := h.DB.Exec(`
+		UPDATE santri SET kelas_id = ?, updated_by = ?
+		WHERE kelas_id = ? AND is_active = 1`, req.ToKelasID, pelaku(r), req.FromKelasID)
 	if err != nil {
 		dbErr(w, err)
 		return
 	}
 	moved, _ := res.RowsAffected()
+
+	// Perpindahan massal wajib tercatat: satu klik memindahkan puluhan santri,
+	// dan tanpa catatan tidak akan terlacak siapa yang melakukannya.
+	audit.Catat(h.DB, r, audit.Entri{
+		Aksi: audit.NaikKelas, Entitas: "santri",
+		Ringkasan: fmt.Sprintf("Memindahkan %d santri dari %s ke %s",
+			moved, h.namaKelas(req.FromKelasID), h.namaKelas(req.ToKelasID)),
+		Rincian: map[string]interface{}{
+			"dari": req.FromKelasID, "ke": req.ToKelasID, "jumlah": moved,
+		},
+	})
+
 	httpx.JSON(w, http.StatusOK, map[string]interface{}{"moved": moved})
 }

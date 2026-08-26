@@ -45,6 +45,11 @@ func RateLimit(max int, window time.Duration) func(http.Handler) http.Handler {
 	}
 }
 
+// ClientIP mengembalikan IP klien yang bisa dipercaya. Diekspor karena
+// pencatatan aktivitas (internal/audit) harus memakai penentuan yang sama
+// persis dengan pembatas laju — kalau berbeda, salah satunya pasti keliru.
+func ClientIP(r *http.Request) string { return clientIP(r) }
+
 // clientIP menentukan kunci pembatas laju.
 //
 // Header X-Forwarded-For / X-Real-IP HANYA dipercaya bila sambungannya datang

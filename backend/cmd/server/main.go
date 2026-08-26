@@ -153,6 +153,9 @@ func main() {
 				r.Get("/kelas/{id}/wali", h.GetWaliKelas)
 				r.Put("/kelas/{id}/wali", h.SetWaliKelas)
 
+				// lini masa perubahan sistem
+				r.Get("/aktivitas", h.ListAktivitas)
+
 				r.Get("/guru", h.ListGuru)
 				r.Post("/guru", h.CreateGuru)
 				r.Put("/guru/{id}", h.UpdateGuru)

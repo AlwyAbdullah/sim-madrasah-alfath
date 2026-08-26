@@ -2,11 +2,13 @@ package handlers
 
 import (
 	"database/sql"
+	"fmt"
 	"net/http"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
 
+	"sim-madrasah/backend/internal/audit"
 	"sim-madrasah/backend/internal/httpx"
 )
 
@@ -149,5 +151,21 @@ func (h *Handler) SetWaliKelas(w http.ResponseWriter, r *http.Request) {
 	}
 
 	daftar, _ := WaliKelas(h.DB, kelasID)
+
+	var namaKelas string
+	_ = h.DB.QueryRow(`SELECT nama FROM kelas WHERE id = ?`, kelasID).Scan(&namaKelas)
+	nama := make([]string, 0, len(daftar))
+	for _, d := range daftar {
+		nama = append(nama, d.Nama)
+	}
+	ket := strings.Join(nama, ", ")
+	if ket == "" {
+		ket = "dikosongkan"
+	}
+	audit.Catat(h.DB, r, audit.Entri{
+		Aksi: audit.UbahWaliKelas, Entitas: "kelas", EntitasID: id,
+		Ringkasan: fmt.Sprintf("Menetapkan wali %s: %s", namaKelas, ket),
+	})
+
 	httpx.JSON(w, http.StatusOK, daftar)
 }

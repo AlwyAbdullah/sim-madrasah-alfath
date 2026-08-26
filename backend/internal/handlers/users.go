@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"sim-madrasah/backend/internal/audit"
 	"sim-madrasah/backend/internal/auth"
 	"sim-madrasah/backend/internal/httpx"
 	"sim-madrasah/backend/internal/middleware"
@@ -158,6 +159,10 @@ func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id, _ := res.LastInsertId()
+	audit.Catat(h.DB, r, audit.Entri{
+		Aksi: audit.BuatAkun, Entitas: "users", EntitasID: strconv.FormatInt(id, 10),
+		Ringkasan: fmt.Sprintf("Membuat akun %s (%s) untuk %s", req.Username, req.Role, req.Nama),
+	})
 	httpx.JSON(w, http.StatusCreated, map[string]interface{}{"id": id})
 }
 
@@ -216,6 +221,12 @@ func (h *Handler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	audit.Catat(h.DB, r, audit.Entri{
+		Aksi: audit.UbahAkun, Entitas: "users", EntitasID: id,
+		Ringkasan: fmt.Sprintf("Mengubah akun %s — peran %s, %s", req.Nama, req.Role,
+			map[bool]string{true: "aktif", false: "nonaktif"}[active]),
+		Rincian: map[string]interface{}{"role_lama": roleLama, "role_baru": req.Role, "aktif": active},
+	})
 	httpx.JSON(w, http.StatusOK, map[string]string{"message": "ok"})
 }
 
@@ -304,6 +315,10 @@ func (h *Handler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 			dbErr(w, err)
 			return
 		}
+		audit.Catat(h.DB, r, audit.Entri{
+			Aksi: audit.HapusAkun, Entitas: "users", EntitasID: id,
+			Ringkasan: fmt.Sprintf("Menghapus PERMANEN akun id %s (peran %s)", id, role),
+		})
 		httpx.JSON(w, http.StatusOK, map[string]string{"message": "Akun dihapus permanen"})
 		return
 	}
@@ -312,6 +327,10 @@ func (h *Handler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 		dbErr(w, err)
 		return
 	}
+	audit.Catat(h.DB, r, audit.Entri{
+		Aksi: audit.HapusAkun, Entitas: "users", EntitasID: id,
+		Ringkasan: fmt.Sprintf("Menonaktifkan akun id %s (peran %s)", id, role),
+	})
 	httpx.JSON(w, http.StatusOK, map[string]string{"message": "Akun dinonaktifkan"})
 }
 
@@ -493,6 +512,17 @@ func (h *Handler) BuatAkunDariGuru(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if len(dibuat) > 0 {
+		nama := make([]string, 0, len(dibuat))
+		for _, d := range dibuat {
+			nama = append(nama, d.Username)
+		}
+		audit.Catat(h.DB, r, audit.Entri{
+			Aksi: audit.BuatAkun, Entitas: "users",
+			Ringkasan: fmt.Sprintf("Membuat %d akun dari master guru", len(dibuat)),
+			Rincian:   map[string]interface{}{"username": nama},
+		})
+	}
 	httpx.JSON(w, http.StatusOK, map[string]interface{}{
 		"dibuat":           dibuat,
 		"jumlah_dibuat":    len(dibuat),
@@ -537,6 +567,10 @@ func (h *Handler) ResetPasswordUser(w http.ResponseWriter, r *http.Request) {
 		dbErr(w, err)
 		return
 	}
+	audit.Catat(h.DB, r, audit.Entri{
+		Aksi: audit.ResetPassword, Entitas: "users", EntitasID: id,
+		Ringkasan: fmt.Sprintf("Mereset password akun id %s", id),
+	})
 	httpx.JSON(w, http.StatusOK, map[string]string{
 		"password": baru,
 		"message":  "Password direset. Catat sekarang — nilainya tidak bisa dilihat lagi setelah layar ini ditutup.",
@@ -582,5 +616,9 @@ func (h *Handler) GantiPasswordSaya(w http.ResponseWriter, r *http.Request) {
 		dbErr(w, err)
 		return
 	}
+	audit.Catat(h.DB, r, audit.Entri{
+		Aksi: audit.GantiPassword, Entitas: "users", EntitasID: strconv.FormatInt(c.UserID, 10),
+		Ringkasan: fmt.Sprintf("%s mengganti passwordnya sendiri", c.Username),
+	})
 	httpx.JSON(w, http.StatusOK, map[string]string{"message": "Password berhasil diganti"})
 }
