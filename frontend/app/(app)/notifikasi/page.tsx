@@ -121,6 +121,20 @@ export default function NotifikasiPage() {
     finally { setSimpanPing(false); }
   }
 
+  async function kirimAbsensiSekarang() {
+    if (!confirm(
+      "Kirim pengingat absensi sekarang, di luar jadwal?\n\n" +
+      "Wali kelas menerima kabar kelasnya masing-masing, superadmin menerima ringkasan."
+    )) return;
+    setSimpanPing(true);
+    try {
+      const d = await api("/pengingat-absensi/kirim", { method: "POST" });
+      setMsg("✅ " + d.message);
+      await load();
+    } catch (e: any) { setMsg("❌ " + e.message); }
+    finally { setSimpanPing(false); }
+  }
+
   async function simpanPengingatSPP(baru: PengaturanSPP) {
     setSppSibuk(true);
     try {
@@ -242,7 +256,9 @@ export default function NotifikasiPage() {
             {ping === null ? <span className="muted">memuat…</span>
               : <span className={`badge ${ping.aktif ? "hadir" : "alpha"}`}>{ping.aktif ? "Aktif" : "Nonaktif"}</span>}
             <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
-              Bila masih ada kelas yang belum diabsen, pengingat dikirim ke Telegram.
+              <strong>Wali kelas</strong> yang sudah menautkan Telegram menerima kabar kelasnya sendiri;
+              <strong> superadmin</strong> menerima ringkasan seluruh madrasah. Kelas yang walinya belum
+              menautkan Telegram tetap dikabarkan ke grup, jadi tidak ada yang luput.
               Otomatis dilewati pada Kamis, Jumat, dan hari libur.
             </div>
           </div>
@@ -261,6 +277,9 @@ export default function NotifikasiPage() {
                 style={ping.aktif ? { color: "var(--danger)" } : undefined}
                 onClick={() => simpanPengingat({ ...ping, aktif: !ping.aktif })}>
                 {ping.aktif ? "🔕 Matikan" : "🔔 Aktifkan"}
+              </button>
+              <button className="btn" disabled={simpanPing} onClick={kirimAbsensiSekarang}>
+                Kirim sekarang
               </button>
             </div>
           )}

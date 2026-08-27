@@ -87,6 +87,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           )}
 
           <div className="nav-section">Akun</div>
+          <NavLink href="/telegram" label="Hubungkan Telegram" icon="📲" pathname={pathname} />
           <NavLink href="/ganti-password" label="Ganti Password" icon="🔑" pathname={pathname} />
         </nav>
       </aside>

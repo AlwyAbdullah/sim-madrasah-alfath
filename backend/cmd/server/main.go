@@ -29,6 +29,8 @@ func main() {
 
 	// Pengirim notifikasi — Telegram (API resmi, satu-satunya kanal).
 	go notifworker.RunTelegram(conn, cfg)
+	// Pembaca pesan masuk — hanya untuk menautkan akun ke chat Telegram.
+	go notifworker.RunTelegramMasuk(conn, cfg)
 	// Pengingat harian bila masih ada kelas yang belum diabsen.
 	go notifworker.RunPengingatAbsensi(conn)
 	// Pengingat bulanan daftar santri yang belum membayar SPP.
@@ -63,6 +65,11 @@ func main() {
 			r.Get("/auth/me", h.Me)
 			// ganti password sendiri — semua peran
 			r.Post("/auth/ganti-password", h.GantiPasswordSaya)
+
+			// menautkan akun sendiri ke Telegram — semua peran, terutama wali kelas
+			r.Get("/telegram/tautan", h.StatusTautanTelegram)
+			r.Post("/telegram/tautan", h.BuatKodeTautanTelegram)
+			r.Delete("/telegram/tautan", h.HapusTautanTelegram)
 
 			// Master (baca — semua role login)
 			r.Get("/kelas", h.ListKelas)
@@ -170,6 +177,7 @@ func main() {
 				r.Get("/notifikasi/pengaturan", h.GetPengaturanNotifikasi)
 				r.Post("/notifikasi/pengaturan", h.SetPengaturanNotifikasi)
 				r.Post("/pengingat-absensi", h.SetPengingatAbsensi)
+				r.Post("/pengingat-absensi/kirim", h.KirimPengingatAbsensiSekarang)
 
 				// Pengingat SPP bulanan (daftar santri yang belum bayar)
 				r.Get("/pengingat-spp", h.GetPengingatSPP)

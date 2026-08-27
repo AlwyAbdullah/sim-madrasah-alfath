@@ -67,7 +67,7 @@ func periksaDanKirimSPP(db *sql.DB, now time.Time) error {
 		return nil
 	}
 
-	tujuan := chatTujuan(db)
+	tujuan := handlers.ChatGrup(db)
 	if tujuan == "" {
 		tandaiPengingatSPPTerkirim(db, bulanIni)
 		log.Printf("pengingat-spp: tujuan chat Telegram belum diatur — pengingat dilewati")
