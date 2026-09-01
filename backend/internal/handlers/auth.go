@@ -27,6 +27,16 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Penguncian diperiksa SEBELUM password, supaya penebakan tidak dibiarkan
+	// terus membebani server dengan bcrypt.
+	ip := middleware.ClientIP(r)
+	if sisa, boleh := h.Gembok.Periksa(req.Username, ip); !boleh {
+		httpx.Error(w, http.StatusTooManyRequests, "TERKUNCI", fmt.Sprintf(
+			"Terlalu banyak percobaan gagal. Coba lagi dalam %s, atau minta admin membuka kuncinya "+
+				"dari halaman User.", lamaTerbaca(sisa)))
+		return
+	}
+
 	var (
 		id           int64
 		passwordHash string
@@ -40,14 +50,41 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 
 	// Pesan generik untuk mencegah enumerasi user.
 	if err == sql.ErrNoRows || !auth.CheckPassword(passwordHash, req.Password) {
+		sisaKesempatan := h.Gembok.Gagal(req.Username, ip)
+		// Kegagalan ini bisa mengunci akunnya, dan bisa juga mengunci alamatnya
+		// (satu alamat yang mencoba banyak akun). Keduanya sama-sama membuat
+		// orangnya tertolak, jadi keduanya harus ikut dilaporkan.
+		_, masihBoleh := h.Gembok.Periksa(req.Username, ip)
+		terkunci := sisaKesempatan == 0 || !masihBoleh
+
 		// Percobaan yang GAGAL ikut dicatat: lonjakannya adalah tanda pertama
 		// ada yang menebak-nebak password — risiko nyata selama password awal
 		// masih seragam.
-		audit.CatatUser(h.DB, r, 0, req.Username, req.Username, audit.Entri{
-			Aksi:      audit.LoginGagal,
-			Ringkasan: fmt.Sprintf("Percobaan login GAGAL untuk %q", req.Username),
-		})
-		httpx.Error(w, http.StatusUnauthorized, "INVALID_CREDENTIALS", "Username atau password salah")
+		aksi, ringkasan := audit.LoginGagal, fmt.Sprintf("Percobaan login GAGAL untuk %q", req.Username)
+		if terkunci {
+			// dicatat dengan aksi tersendiri supaya admin bisa menyaringnya di
+			// halaman Aktivitas — inilah kejadian yang perlu ditindaklanjuti
+			aksi = audit.LoginTerkunci
+			if sisaKesempatan == 0 {
+				ringkasan = fmt.Sprintf("Login %q dikunci sementara setelah terlalu banyak percobaan gagal", req.Username)
+			} else {
+				ringkasan = fmt.Sprintf(
+					"Alamat ini dikunci sementara — terlalu banyak percobaan gagal untuk berbagai akun (terakhir %q)",
+					req.Username)
+			}
+		}
+		audit.CatatUser(h.DB, r, 0, req.Username, req.Username, audit.Entri{Aksi: aksi, Ringkasan: ringkasan})
+
+		pesan := "Username atau password salah"
+		switch {
+		case terkunci:
+			pesan = "Username atau password salah. Login dikunci sementara — coba lagi nanti, " +
+				"atau minta admin membuka kuncinya dari halaman User."
+		case sisaKesempatan <= 2:
+			pesan = fmt.Sprintf("Username atau password salah. Sisa %d percobaan sebelum login dikunci sementara.",
+				sisaKesempatan)
+		}
+		httpx.Error(w, http.StatusUnauthorized, "INVALID_CREDENTIALS", pesan)
 		return
 	}
 	if err != nil {
@@ -58,6 +95,10 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, http.StatusForbidden, "USER_INACTIVE", "Akun dinonaktifkan")
 		return
 	}
+	// Password yang benar membuktikan ini pemiliknya — hitungan gagal dinolkan.
+	// Dilakukan sebelum pembuatan sesi supaya kegagalan teknis di bawah tidak
+	// ikut menghabiskan jatah percobaan orang yang sudah benar passwordnya.
+	h.Gembok.Berhasil(req.Username, ip)
 
 	// Sesi dibuat SEBELUM token, karena id-nya ditanam ke dalam token. Kalau
 	// gagal, login dibatalkan — token tanpa sesi tidak akan bisa dipakai.

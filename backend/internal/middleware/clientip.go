@@ -4,53 +4,15 @@ import (
 	"net"
 	"net/http"
 	"strings"
-	"sync"
-	"time"
-
-	"sim-madrasah/backend/internal/httpx"
 )
 
-// RateLimit sederhana berbasis IP (in-memory) — cukup untuk MVP/login.
-// Untuk produksi multi-instance gunakan Redis.
-type limiter struct {
-	mu      sync.Mutex
-	hits    map[string][]time.Time
-	max     int
-	window  time.Duration
-}
-
-func RateLimit(max int, window time.Duration) func(http.Handler) http.Handler {
-	l := &limiter{hits: make(map[string][]time.Time), max: max, window: window}
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			ip := clientIP(r)
-			now := time.Now()
-			l.mu.Lock()
-			recent := []time.Time{}
-			for _, t := range l.hits[ip] {
-				if now.Sub(t) < l.window {
-					recent = append(recent, t)
-				}
-			}
-			if len(recent) >= l.max {
-				l.mu.Unlock()
-				httpx.Error(w, http.StatusTooManyRequests, "RATE_LIMITED", "Terlalu banyak percobaan. Coba lagi nanti.")
-				return
-			}
-			recent = append(recent, now)
-			l.hits[ip] = recent
-			l.mu.Unlock()
-			next.ServeHTTP(w, r)
-		})
-	}
-}
-
 // ClientIP mengembalikan IP klien yang bisa dipercaya. Diekspor karena
-// pencatatan aktivitas (internal/audit) harus memakai penentuan yang sama
-// persis dengan pembatas laju — kalau berbeda, salah satunya pasti keliru.
+// pencatatan aktivitas (internal/audit), daftar sesi, dan penguncian login
+// (internal/gembok) harus memakai penentuan yang sama persis — kalau berbeda,
+// salah satunya pasti keliru.
 func ClientIP(r *http.Request) string { return clientIP(r) }
 
-// clientIP menentukan kunci pembatas laju.
+// clientIP menentukan identitas pemanggil.
 //
 // Header X-Forwarded-For / X-Real-IP HANYA dipercaya bila sambungannya datang
 // dari localhost, yaitu dari nginx di mesin yang sama. Alasannya:
@@ -76,8 +38,8 @@ func clientIP(r *http.Request) string {
 			return strings.TrimSpace(bagian[len(bagian)-1])
 		}
 	}
-	// port dibuang: tanpa ini tiap sambungan TCP baru punya kunci berbeda,
-	// sehingga hitungannya selalu mulai dari nol
+	// port dibuang: tanpa ini tiap sambungan TCP baru punya identitas berbeda,
+	// sehingga hitungan percobaan gagal selalu mulai dari nol
 	return host
 }
 

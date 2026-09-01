@@ -24,6 +24,8 @@ import (
 const (
 	Login            = "login"
 	LoginGagal       = "login_gagal"
+	LoginTerkunci    = "login_terkunci"
+	BukaBlokir       = "buka_blokir_login"
 	Logout           = "logout"
 	PutusSesi        = "putus_sesi"
 	SimpanAbsensi    = "simpan_absensi"

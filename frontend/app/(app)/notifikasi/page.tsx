@@ -17,11 +17,14 @@ type Item = {
   created_at: string;
 };
 
-type TunggakanKelas = { kelas_id: number; kelas: string; total: number; belum: string[] };
+// teks = bulan tertunggak yang sudah dirangkum, mis. "Agustus–September (2 bln)"
+type SantriTunggakan = { santri_id: number; nama: string; teks: string };
+type TunggakanKelas = { kelas_id: number; kelas: string; total: number; belum: SantriTunggakan[] };
 type RekapSPP = {
   tahun: number;
   bulan: number;
   nama_bulan: string;
+  tahun_ajaran: string;
   total_santri: number;
   lunas: number;
   belum: number;
@@ -294,15 +297,16 @@ export default function NotifikasiPage() {
             {spp === null ? <span className="muted">memuat…</span>
               : <span className={`badge ${spp.aktif ? "hadir" : "alpha"}`}>{spp.aktif ? "Aktif" : "Nonaktif"}</span>}
             <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
-              Sekali sebulan, daftar santri yang <strong>belum membayar SPP bulan berjalan</strong> dikirim ke Telegram.
-              Santri yang belum punya catatan pembayaran sama sekali ikut terhitung belum bayar.
+              Sekali sebulan, daftar santri yang <strong>masih punya tunggakan SPP</strong> dikirim ke Telegram,
+              lengkap dengan <strong>bulan apa saja</strong> yang belum dibayar sejak Juli. Santri yang belum
+              punya catatan pembayaran sama sekali ikut terhitung belum bayar.
             </div>
             {rekap && (
               <div style={{ marginTop: 8 }}>
-                <span className="badge alpha">Belum bayar {rekap.belum}</span>{" "}
+                <span className="badge alpha">Menunggak {rekap.belum}</span>{" "}
                 <span className="badge hadir">Lunas {rekap.lunas}</span>{" "}
                 <span className="muted" style={{ fontSize: 12 }}>
-                  dari {rekap.total_santri} santri · {rekap.nama_bulan} {rekap.tahun}
+                  dari {rekap.total_santri} santri · TA {rekap.tahun_ajaran}, sampai {rekap.nama_bulan} {rekap.tahun}
                 </span>
                 {kelasBelum.length > 0 && (
                   <button className="btn secondary" style={{ padding: "2px 8px", marginLeft: 8, fontSize: 12 }}
@@ -317,8 +321,14 @@ export default function NotifikasiPage() {
                 {kelasBelum.map((k) => (
                   <div key={k.kelas_id} style={{ fontSize: 13 }}>
                     <strong>{k.kelas}</strong>{" "}
-                    <span className="muted">— {k.belum.length} dari {k.total} belum bayar</span>
-                    <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>{k.belum.join(" · ")}</div>
+                    <span className="muted">— {k.belum.length} dari {k.total} belum lunas</span>
+                    <div style={{ fontSize: 12, marginTop: 2 }}>
+                      {k.belum.map((s) => (
+                        <div key={s.santri_id}>
+                          {s.nama} <span className="muted">— {s.teks}</span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 ))}
               </div>

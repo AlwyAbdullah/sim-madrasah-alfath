@@ -75,13 +75,13 @@ func periksaDanKirimSPP(db *sql.DB, now time.Time) error {
 	}
 
 	ref := fmt.Sprintf("%s-01", bulanIni)
-	if err := handlers.AntreNotifikasi(db, handlers.JenisPengingatSPP, ref, tujuan,
-		handlers.PesanTunggakanSPP(rekap)); err != nil {
+	pesan := handlers.PesanTunggakanSPP(rekap)
+	if err := handlers.AntreBanyakNotifikasi(db, handlers.JenisPengingatSPP, ref, tujuan, pesan); err != nil {
 		return fmt.Errorf("gagal mengantrekan pengingat: %w", err)
 	}
 	tandaiPengingatSPPTerkirim(db, bulanIni)
-	log.Printf("pengingat-spp: %s diantrekan ke %s (%d dari %d santri belum bayar)",
-		bulanIni, tujuan, rekap.Belum, rekap.TotalSantri)
+	log.Printf("pengingat-spp: %s diantrekan ke %s dalam %d pesan (%d dari %d santri punya tunggakan)",
+		bulanIni, tujuan, len(pesan), rekap.Belum, rekap.TotalSantri)
 	return nil
 }
 

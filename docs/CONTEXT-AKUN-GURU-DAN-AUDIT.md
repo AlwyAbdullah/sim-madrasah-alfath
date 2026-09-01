@@ -200,6 +200,41 @@ Usulan yang menutup kebutuhannya tanpa menyimpan password terbaca:
 
 **Disetujui** — password tidak disimpan terbaca; dipakai status + reset.
 
+**Tombol lihat password di halaman login.** Password awal dibagikan lisan, dan di HP satu huruf
+salah ketik tidak kelihatan sama sekali. Ikonnya mata di ujung kanan kolom password; bawaannya
+tetap tersembunyi.
+
+### 4.4b Penguncian setelah salah password berkali-kali
+
+Yang dipakai sampai Tahap 4 adalah pembatas laju per **alamat IP**: 5 percobaan / 15 menit,
+menghitung **semua** percobaan termasuk yang berhasil. Dua akibatnya baru terlihat setelah
+seluruh guru punya akun sendiri:
+
+1. Satu WiFi madrasah = satu alamat IP di mata server. Guru keenam yang login pagi itu ditolak
+   walaupun passwordnya benar.
+2. Login yang benar pun menghabiskan jatah, jadi yang terkunci justru pengguna yang sah.
+
+Sekarang (`backend/internal/gembok`):
+
+| | Batas | Alasan |
+|---|---|---|
+| Per nama akun | 5 gagal / 15 menit | menghalangi penebakan password satu orang |
+| Per alamat IP | 20 gagal / 15 menit | jaring pengaman untuk pemindai yang mencoba banyak akun |
+
+- Yang dihitung **hanya percobaan gagal**; login yang berhasil menghapus kedua hitungan.
+- Pesan salah password menyebutkan sisa kesempatan mulai dari dua terakhir, supaya orang berhenti
+  menebak sebelum terkunci.
+- Terkunci tercatat di Aktivitas sebagai `login_terkunci`, dibuka admin sebagai `buka_blokir_login`.
+- **Admin membuka kunci** dari halaman User (tombol *Buka kunci*, juga terpasang otomatis pada
+  *Reset pw*). Membuka sebuah akun sekaligus membuka alamat yang ikut terkunci karenanya —
+  kalau tidak, orangnya tetap tertolak dan mengira tombolnya tidak berfungsi.
+- Hitungannya **di memori**, bukan database: restart layanan = semua kunci terbuka. Untuk satu
+  server madrasah itu justru menyederhanakan — tidak ada yang perlu dibersihkan.
+
+Konsekuensi yang disengaja: orang lain bisa mengunci sebuah akun dengan sengaja salah password
+5 kali. Itu melekat pada semua penguncian berbasis akun; ruginya dibatasi karena kuncinya lepas
+sendiri dalam 15 menit dan admin bisa membukanya seketika.
+
 ### 4.5 Menghapus akun — ada jebakan
 
 Seluruh 10 foreign key `created_by` → `users` memakai **`ON DELETE SET NULL`**. Menghapus akun

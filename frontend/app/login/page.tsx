@@ -4,12 +4,39 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 
+// Ikon digambar langsung di sini (bukan emoji 👁) supaya ukurannya sama di
+// semua HP — emoji dirender tiap ponsel dengan gaya dan lebarnya sendiri.
+function IkonMata() {
+  return (
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  );
+}
+
+function IkonMataTertutup() {
+  return (
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
+      <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
+      <path d="M14.12 14.12a3 3 0 1 1-4.24-4.24" />
+      <line x1="1" y1="1" x2="23" y2="23" />
+    </svg>
+  );
+}
+
 export default function LoginPage() {
   const router = useRouter();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  // Password bawaan dibagikan lisan ke guru; tanpa tombol ini, salah ketik satu
+  // huruf tidak kelihatan dan berakhir jadi "akun saya tidak bisa dibuka".
+  const [lihatPass, setLihatPass] = useState(false);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -52,8 +79,21 @@ export default function LoginPage() {
           value={username} onChange={(e) => setUsername(e.target.value)} autoFocus required />
 
         <label style={{ fontSize: 13, fontWeight: 600 }}>Password</label>
-        <input className="input" type="password" style={{ width: "100%", margin: "6px 0 20px" }}
-          value={password} onChange={(e) => setPassword(e.target.value)} required />
+        <div style={{ position: "relative", margin: "6px 0 20px" }}>
+          <input className="input" type={lihatPass ? "text" : "password"}
+            style={{ width: "100%", paddingRight: 44 }}
+            value={password} onChange={(e) => setPassword(e.target.value)} required />
+          <button type="button" onClick={() => setLihatPass((v) => !v)}
+            aria-label={lihatPass ? "Sembunyikan password" : "Lihat password"}
+            title={lihatPass ? "Sembunyikan password" : "Lihat password"}
+            style={{
+              position: "absolute", top: 0, right: 0, height: "100%", width: 42,
+              display: "grid", placeItems: "center", cursor: "pointer",
+              background: "none", border: 0, padding: 0, color: "var(--muted)",
+            }}>
+            {lihatPass ? <IkonMataTertutup /> : <IkonMata />}
+          </button>
+        </div>
 
         <button className="btn" style={{ width: "100%" }} disabled={loading}>
           {loading ? "Memproses..." : "Masuk"}

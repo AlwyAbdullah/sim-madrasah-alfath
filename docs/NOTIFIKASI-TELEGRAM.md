@@ -51,7 +51,7 @@ pengingat/pemicu → INSERT ke `notifikasi` (pending)
 | Pengingat | Kapan | Isi |
 |---|---|---|
 | **Absensi harian** | tiap hari sekolah pada jam yang diatur (bawaan 19:00) | kelas yang belum / baru sebagian diabsen |
-| **SPP bulanan** | tiap tanggal yang diatur (bawaan tanggal 10, 19:00) | santri yang belum membayar SPP **bulan berjalan**, dikelompokkan per kelas |
+| **SPP bulanan** | tiap tanggal yang diatur (bawaan tanggal 10, 19:00) | santri yang masih punya **tunggakan SPP tahun ajaran berjalan**, per kelas, lengkap dengan bulan apa saja yang belum dibayar |
 
 Keduanya punya sifat yang sama:
 
@@ -69,11 +69,23 @@ Keduanya punya sifat yang sama:
 - Yang dihitung "belum bayar" mencakup santri yang **belum punya baris SPP sama sekali**,
   bukan hanya yang barisnya `lunas = 0`. Ini disengaja: di produksi banyak santri memang
   belum punya barisnya, dan mereka jelas belum membayar.
+- **Seluruh bulan yang sudah jatuh tempo pada tahun ajaran berjalan** ikut diperiksa
+  (Juli sampai bulan berjalan), dan tiap santri disebut menunggak bulan apa sampai apa —
+  mis. `Agustus–September (2 bln)`. Sebelumnya hanya satu bulan yang diperiksa, sehingga
+  santri yang membayar bulan ini tapi menunggak bulan lalu tidak pernah muncul.
+  Bulan yang terputus tetap ditulis terpisah (`Juli, September`) supaya bulan yang sudah
+  dibayar tidak ikut tertagih.
+- Tahun ajaran sebelumnya **tidak** ikut dihitung: kelasnya berbeda dan datanya jauh lebih
+  jarang, sehingga hanya akan memunculkan tunggakan karangan.
+- ⚠️ Santri yang masuk di tengah tahun ajaran akan tampak menunggak sejak Juli — tabel
+  `santri` tidak menyimpan tanggal masuk. Sementara ini bisa dirapikan dengan menandai
+  bulan-bulan sebelum ia masuk sebagai lunas di halaman SPP.
 - Tanggal pengiriman dibatasi **1–28** agar selalu ada di setiap bulan (Februari tidak
   punya tanggal 29–31).
-- Bila daftar nama melebihi satu pesan Telegram (batas 4096 karakter), pesan otomatis
-  disusun ulang tanpa nama — hanya jumlah per kelas — dengan catatan agar membuka halaman SPP.
-  Lebih baik ringkas tapi utuh daripada terpotong di tengah nama.
+- Bila daftar nama melebihi satu pesan Telegram (batas 4096 karakter), pesannya **dipecah
+  menjadi beberapa bagian** ("Bagian 1 dari 2") pada batas kelas — bukan namanya yang
+  dibuang. Nama dan bulan tertunggak itulah isi yang berguna. Kelas yang sendirian sudah
+  kepanjangan ikut dipecah, dengan judul kelasnya diulang.
 - Tombol **Kirim sekarang** di halaman Notifikasi mengirim di luar jadwal dan sengaja
   **tidak** mengubah `terakhir_kirim`, sehingga tidak membatalkan pengingat terjadwal bulan itu.
 

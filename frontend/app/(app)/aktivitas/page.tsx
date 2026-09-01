@@ -35,6 +35,8 @@ type Sesi = {
 const AKSI_LABEL: Record<string, string> = {
   login: "Login",
   login_gagal: "Login GAGAL",
+  login_terkunci: "Login DIKUNCI",
+  buka_blokir_login: "Kunci login dibuka",
   logout: "Logout",
   putus_sesi: "Sesi diputus",
   simpan_absensi: "Absensi",
@@ -59,6 +61,8 @@ const AKSI_LABEL: Record<string, string> = {
 // aksi yang perlu menonjol saat disapu mata
 const WARNA: Record<string, string> = {
   login_gagal: "alpha",
+  login_terkunci: "alpha",
+  buka_blokir_login: "sakit",
   putus_sesi: "alpha",
   reset_password: "alpha",
   hapus_akun: "alpha",
@@ -73,7 +77,7 @@ const WARNA: Record<string, string> = {
 const HALAMAN = 100;
 
 // jenis peristiwa yang ditampilkan di tab "Riwayat login"
-const AKSI_SESI = ["login", "login_gagal", "logout", "putus_sesi"];
+const AKSI_SESI = ["login", "login_gagal", "login_terkunci", "buka_blokir_login", "logout", "putus_sesi"];
 
 type Tab = "sesi" | "login" | "log";
 

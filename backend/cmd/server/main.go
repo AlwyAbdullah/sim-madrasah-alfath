@@ -3,7 +3,6 @@ package main
 import (
 	"log"
 	"net/http"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
@@ -51,11 +50,10 @@ func main() {
 	})
 
 	r.Route("/api/v1", func(r chi.Router) {
-		// Publik + rate limit untuk login
-		r.Group(func(r chi.Router) {
-			r.Use(middleware.RateLimit(5, 15*time.Minute))
-			r.Post("/auth/login", h.Login)
-		})
+		// Publik. Pembatasan percobaan login ada DI DALAM handler (lihat
+		// internal/gembok): yang dikunci nama akun, dan nama akun baru
+		// diketahui setelah badan permintaan dibaca.
+		r.Post("/auth/login", h.Login)
 		r.Post("/auth/logout", h.Logout)
 
 		// Terproteksi (semua guru bisa akses semua kelas — tanpa batasan kelas ampu)
@@ -164,6 +162,9 @@ func main() {
 				r.Get("/aktivitas", h.ListAktivitas)
 				// sesi yang sedang berjalan
 				r.Get("/sesi", h.ListSesi)
+				// akun/alamat yang sedang terkunci karena salah password berkali-kali
+				r.Get("/login-blokir", h.ListBlokirLogin)
+				r.Post("/login-blokir/buka", h.BukaBlokirLogin)
 
 				r.Get("/guru", h.ListGuru)
 				r.Post("/guru", h.CreateGuru)

@@ -44,6 +44,11 @@ type userOut struct {
 	StatusPass    string   `json:"status_password"` // "default" | "diganti"
 	TerakhirLogin *string  `json:"terakhir_login"`
 	WaliKelas     []string `json:"wali_kelas"`
+	// Terkunci karena salah password berkali-kali. Bukan dari database —
+	// hitungannya ada di memori dan hilang saat layanan restart.
+	LoginTerkunci  bool `json:"login_terkunci"`
+	LoginGagal     int  `json:"login_gagal"`
+	LoginSisaDetik int  `json:"login_sisa_detik"`
 }
 
 // GET /users
@@ -83,6 +88,7 @@ func (h *Handler) ListUsers(w http.ResponseWriter, r *http.Request) {
 			x.TerakhirLogin = &terakhir.String
 		}
 		x.StatusPass = statusPassword(hash)
+		x.LoginTerkunci, x.LoginGagal, x.LoginSisaDetik = h.Gembok.Status(x.Username)
 		x.WaliKelas = []string{}
 		idx[x.ID] = len(out)
 		out = append(out, x)
@@ -556,7 +562,8 @@ func (h *Handler) ResetPasswordUser(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, http.StatusBadRequest, "BAD_REQUEST", "Password minimal 6 karakter")
 		return
 	}
-	if _, _, err := h.roleDanAktif(id); err != nil {
+	var namaAkun string
+	if err := h.DB.QueryRow(`SELECT username FROM users WHERE id = ?`, id).Scan(&namaAkun); err != nil {
 		httpx.Error(w, http.StatusNotFound, "NOT_FOUND", "Akun tidak ditemukan")
 		return
 	}
@@ -577,6 +584,9 @@ func (h *Handler) ResetPasswordUser(w http.ResponseWriter, r *http.Request) {
 		pemutus = c.UserID
 	}
 	h.akhiriSemuaSesiUser(id, pemutus)
+	// Reset password paling sering diminta justru karena orangnya sudah salah
+	// berkali-kali. Tanpa ini passwordnya baru tapi pintunya masih terkunci.
+	h.Gembok.BukaAkun(namaAkun)
 
 	audit.Catat(h.DB, r, audit.Entri{
 		Aksi: audit.ResetPassword, Entitas: "users", EntitasID: id,

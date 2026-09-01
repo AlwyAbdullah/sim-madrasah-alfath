@@ -14,6 +14,20 @@ type User = {
   status_password: "default" | "diganti";
   terakhir_login: string | null;
   wali_kelas: string[];
+  login_terkunci: boolean;
+  login_gagal: number;
+  login_sisa_detik: number;
+};
+
+// Penguncian login karena salah password berkali-kali. Hanya ada di memori
+// server, jadi daftarnya kosong lagi setiap layanan direstart.
+type Blokir = {
+  jenis: "akun" | "ip";
+  kunci: string;
+  nama: string;
+  gagal: number;
+  sisa_detik: number;
+  sisa_teks: string;
 };
 
 type Calon = {
@@ -35,6 +49,7 @@ const PASS_AWAL = "guru123";
 
 export default function UsersMaster() {
   const [items, setItems] = useState<User[]>([]);
+  const [blokir, setBlokir] = useState<Blokir[]>([]);
   const [saya, setSaya] = useState<{ nama: string; role: string } | null>(null);
   const [msg, setMsg] = useState("");
 
@@ -54,7 +69,9 @@ export default function UsersMaster() {
   const [passBaru, setPassBaru] = useState<{ nama: string; password: string } | null>(null);
 
   const load = useCallback(async () => {
-    setItems(await api("/users"));
+    const [u, b] = await Promise.all([api("/users"), api("/login-blokir")]);
+    setItems(u);
+    setBlokir(b);
   }, []);
 
   useEffect(() => {
@@ -99,6 +116,14 @@ export default function UsersMaster() {
     try {
       const d = await api(`/users/${u.id}/reset-password`, { method: "POST", body: {} });
       setPassBaru({ nama: u.nama, password: d.password });
+      await load();
+    } catch (e: any) { setMsg("❌ " + e.message); }
+  }
+
+  async function bukaKunci(jenis: "akun" | "ip", kunci: string) {
+    try {
+      const d = await api("/login-blokir/buka", { method: "POST", body: { jenis, kunci } });
+      setMsg(d.message);
       await load();
     } catch (e: any) { setMsg("❌ " + e.message); }
   }
@@ -194,6 +219,39 @@ export default function UsersMaster() {
       </p>
 
       {msg && <div className="card" style={{ padding: 12 }}>{msg}</div>}
+
+      {/* ===== login yang sedang terkunci ===== */}
+      {blokir.length > 0 && (
+        <div className="card" style={{ padding: 16, borderLeft: "4px solid var(--danger)" }}>
+          <strong>🔒 Login terkunci sementara ({blokir.length})</strong>
+          <div className="muted" style={{ fontSize: 12, margin: "6px 0 10px" }}>
+            Terkunci otomatis setelah beberapa kali salah password. Kuncinya lepas sendiri setelah
+            waktunya habis — tombol di bawah hanya mempercepat, dan tidak mengubah passwordnya.
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {blokir.map((b) => (
+              <div key={`${b.jenis}-${b.kunci}`} className="row"
+                style={{ justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                <div style={{ fontSize: 13 }}>
+                  {b.jenis === "akun" ? (
+                    <>
+                      <strong>{b.nama || b.kunci}</strong>{" "}
+                      <code style={{ fontSize: 12 }}>{b.kunci}</code>
+                    </>
+                  ) : (
+                    <>
+                      Alamat jaringan <code style={{ fontSize: 12 }}>{b.kunci}</code>
+                    </>
+                  )}
+                  <span className="muted"> — {b.gagal}× gagal, terbuka sendiri dalam {b.sisa_teks}</span>
+                </div>
+                <button className="btn secondary" style={{ padding: "4px 10px" }}
+                  onClick={() => bukaKunci(b.jenis, b.kunci)}>Buka kunci</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ===== hasil reset password — tampil sekali ===== */}
       {passBaru && (
@@ -345,9 +403,18 @@ export default function UsersMaster() {
                   <span className={`badge ${u.is_active ? "hadir" : "alpha"}`}>
                     {u.is_active ? "Aktif" : "Nonaktif"}
                   </span>
+                  {u.login_terkunci && (
+                    <div className="badge alpha" style={{ marginTop: 4 }} title={`${u.login_gagal}× salah password`}>
+                      🔒 Terkunci
+                    </div>
+                  )}
                 </td>
                 <td>
                   <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+                    {u.login_terkunci && (
+                      <button className="btn" style={{ padding: "4px 8px" }}
+                        onClick={() => bukaKunci("akun", u.username)}>Buka kunci</button>
+                    )}
                     {superadmin && (
                       <button className="btn secondary" style={{ padding: "4px 8px" }} onClick={() => reset(u)}>
                         Reset pw
@@ -371,7 +438,9 @@ export default function UsersMaster() {
       <p className="muted" style={{ fontSize: 12, margin: 0 }}>
         Kolom <strong>Password</strong> hanya bisa menunjukkan apakah password masih bawaan atau
         sudah diganti — isinya sendiri tidak tersimpan dalam bentuk terbaca, bahkan di backup
-        sekalipun. Kalau seseorang lupa passwordnya, pakai <strong>Reset pw</strong>.
+        sekalipun. Kalau seseorang lupa passwordnya, pakai <strong>Reset pw</strong>. Kalau
+        passwordnya benar tapi tertolak karena tadi salah berkali-kali, cukup{" "}
+        <strong>Buka kunci</strong> — passwordnya tidak perlu diganti.
       </p>
     </div>
   );
